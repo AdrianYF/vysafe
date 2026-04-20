@@ -4,6 +4,7 @@ import '../styles/Home.css';
 function Home() {
   const [showMessages, setShowMessages] = useState(false);
   const [mensajes, setMensajes] = useState([]);
+  const [colorActual, setColorActual] = useState(null);
   const [redProgress, setRedProgress] = useState(0);
   const [redHolding, setRedHolding] = useState(false);
   const [selectedMsg, setSelectedMsg] = useState(null);
@@ -16,12 +17,9 @@ function Home() {
     amarillo: ['Saliendo de casa', 'Subiendo al colectivo', 'Caminando, todo bien'],
   };
 
-  const startHoldVerde = () => {
-    enviarAlerta('verde', 'Todo bien');
-  };
-
-  const startHoldAmarillo = () => {
-    setMensajes(mensajesPorColor.amarillo);
+  const abrirMensajes = (color) => {
+    setColorActual(color);
+    setMensajes(mensajesPorColor[color]);
     setShowMessages(true);
   };
 
@@ -59,7 +57,7 @@ function Home() {
         setShowMessages(false);
         setMsgProgress(0);
         setSelectedMsg(null);
-        enviarAlerta('amarillo', msg);
+        enviarAlerta(colorActual, msg);
       }
     }, 100);
   };
@@ -88,15 +86,15 @@ function Home() {
       {showMessages && (
         <div className="messages-overlay">
           <div className="messages-panel">
-            <p className="messages-title">Elegí un mensaje</p>
+            <p className="messages-title">Mantené apretado para enviar</p>
             {mensajes.map((msg, i) => (
               <button
                 key={i}
-                className="message-option amarillo"
+                className={`message-option ${colorActual}`}
                 onMouseDown={() => startMsgHold(msg)}
                 onMouseUp={endMsgHold}
                 onMouseLeave={endMsgHold}
-                onTouchStart={() => startMsgHold(msg)}
+                onTouchStart={(e) => { e.preventDefault(); startMsgHold(msg); }}
                 onTouchEnd={endMsgHold}
               >
                 <span className="msg-text">{msg}</span>
@@ -117,23 +115,26 @@ function Home() {
 
       <div className="buttons-container">
         <div className="button-row">
-          <span className="button-label">Todo bien</span>
-          <button className="alert-btn btn-green" onClick={startHoldVerde}>✓</button>
+          <button className="alert-btn btn-green" onClick={() => abrirMensajes('verde')}>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </button>
         </div>
         <div className="button-row">
-          <span className="button-label">Atención</span>
-          <button className="alert-btn btn-yellow" onClick={startHoldAmarillo}>!</button>
+          <button className="alert-btn btn-yellow" onClick={() => abrirMensajes('amarillo')}>
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><circle cx="12" cy="16" r="1" fill="white"/></svg>
+          </button>
         </div>
         <div className="button-row">
-          <span className="button-label">Emergencia</span>
           <button
             className={`alert-btn btn-red ${redHolding ? 'pressing' : ''}`}
             onMouseDown={startHoldRojo}
             onMouseUp={endHoldRojo}
             onMouseLeave={endHoldRojo}
-            onTouchStart={startHoldRojo}
+            onTouchStart={(e) => { e.preventDefault(); startHoldRojo(); }}
             onTouchEnd={endHoldRojo}
-          >▲</button>
+          >
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><circle cx="12" cy="17" r="1" fill="white"/></svg>
+          </button>
         </div>
       </div>
     </div>
