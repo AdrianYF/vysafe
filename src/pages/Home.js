@@ -8,7 +8,6 @@ function Home() {
   const [redHolding, setRedHolding] = useState(false);
   const [selectedMsg, setSelectedMsg] = useState(null);
   const [msgProgress, setMsgProgress] = useState(0);
-  const holdTimer = useRef(null);
   const redInterval = useRef(null);
   const msgTimer = useRef(null);
 
@@ -18,13 +17,10 @@ function Home() {
   };
 
   const startHoldVerde = () => {
-    setActiveColor('verde');
-    holdTimer.current = setTimeout(() => {}, 0);
     enviarAlerta('verde', 'Todo bien');
   };
 
   const startHoldAmarillo = () => {
-    setActiveColor('amarillo');
     setMensajes(mensajesPorColor.amarillo);
     setShowMessages(true);
   };
@@ -124,12 +120,10 @@ function Home() {
           <span className="button-label">Todo bien</span>
           <button className="alert-btn btn-green" onClick={startHoldVerde}>✓</button>
         </div>
-
         <div className="button-row">
           <span className="button-label">Atención</span>
           <button className="alert-btn btn-yellow" onClick={startHoldAmarillo}>!</button>
         </div>
-
         <div className="button-row">
           <span className="button-label">Emergencia</span>
           <button
