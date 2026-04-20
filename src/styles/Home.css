@@ -1,0 +1,159 @@
+.home-container {
+  min-height: 100vh;
+  background-color: #0d0d0d;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+}
+
+.home-header {
+  text-align: center;
+  padding: 3rem 1rem 1rem;
+}
+
+.home-title {
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  color: #ffffff;
+}
+
+.home-subtitle {
+  font-size: 12px;
+  color: #555;
+  margin-top: 4px;
+}
+
+.buttons-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 2rem;
+  gap: 24px;
+  width: 100%;
+  max-width: 400px;
+}
+
+.button-row {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  justify-content: flex-end;
+  width: 100%;
+}
+
+.button-label {
+  font-size: 12px;
+  color: #555;
+}
+
+.alert-btn {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  font-size: 24px;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.15s;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.alert-btn.pressing {
+  transform: scale(0.92);
+}
+
+.btn-green { background-color: #2ecc71; }
+.btn-yellow { background-color: #f39c12; }
+.btn-red { background-color: #e74c3c; }
+
+.messages-panel {
+  position: fixed;
+  bottom: 100px;
+  right: 20px;
+  background: #1a1a1a;
+  border: 1px solid #2a2a2a;
+  border-radius: 16px;
+  padding: 12px;
+  width: 220px;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.messages-title {
+  font-size: 11px;
+  color: #666;
+  padding: 0 4px;
+}
+
+.message-option {
+  padding: 10px 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  color: #ccc;
+  cursor: pointer;
+  border: none;
+  background: #252525;
+  text-align: left;
+  transition: background 0.1s;
+}
+
+.message-option:hover {
+  background: #333;
+}
+
+.message-option.verde {
+  border-left: 3px solid #2ecc71;
+}
+
+.message-option.amarillo {
+  border-left: 3px solid #f39c12;
+}
+
+.message-cancel {
+  padding: 8px;
+  border-radius: 10px;
+  font-size: 12px;
+  color: #555;
+  cursor: pointer;
+  border: none;
+  background: transparent;
+  text-align: center;
+}
+
+.bottom-nav {
+  width: 100%;
+  background: #111;
+  border-top: 1px solid #1a1a1a;
+  display: flex;
+  justify-content: space-around;
+  padding: 12px 0 24px;
+}
+
+.nav-item {
+  background: none;
+  border: none;
+  color: #555;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 8px;
+  transition: color 0.2s;
+}
+
+.nav-item.active {
+  color: #aaa;
+}
+
+.nav-item:hover {
+  color: #aaa;
+}
