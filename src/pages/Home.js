@@ -4,8 +4,7 @@ import { supabase } from '../supabase';
 import '../styles/Home.css';
 
 function Home() {
-  const [user, setUser] = useState(null);
-  const [holding, setHolding] = useState(false);
+  const [user, setUser] = useState(null); // eslint-disable-line
   const [activeColor, setActiveColor] = useState(null);
   const [showMessages, setShowMessages] = useState(false);
   const [mensajes, setMensajes] = useState([]);
