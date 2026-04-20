@@ -1,121 +1,149 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '../supabase';
 import '../styles/Home.css';
 
 function Home() {
-  const [user, setUser] = useState(null); // eslint-disable-line
-  const [activeColor, setActiveColor] = useState(null);
   const [showMessages, setShowMessages] = useState(false);
   const [mensajes, setMensajes] = useState([]);
-  const navigate = useNavigate();
-  let holdTimer = null;
-
-  useEffect(() => {
-    supabase.auth.getUser().then(({ data }) => {
-      if (!data.user) navigate('/');
-      else setUser(data.user);
-    });
-  }, [navigate]);
+  const [activeColor, setActiveColor] = useState(null);
+  const [redProgress, setRedProgress] = useState(0);
+  const [redHolding, setRedHolding] = useState(false);
+  const [selectedMsg, setSelectedMsg] = useState(null);
+  const [msgProgress, setMsgProgress] = useState(0);
+  const holdTimer = useRef(null);
+  const redInterval = useRef(null);
+  const msgTimer = useRef(null);
 
   const mensajesPorColor = {
     verde: ['Llegué bien a destino', 'Estoy en lugar seguro', 'Todo tranquilo'],
     amarillo: ['Saliendo de casa', 'Subiendo al colectivo', 'Caminando, todo bien'],
   };
 
-  const startHold = (color) => {
-    setActiveColor(color);
-    if (color === 'rojo') {
-      holdTimer = setTimeout(() => {
-        enviarAlerta('rojo', '🔴 EMERGENCIA - Necesito ayuda urgente');
-      }, 3000);
-    } else {
-      holdTimer = setTimeout(() => {
-        setMensajes(mensajesPorColor[color]);
-        setShowMessages(true);
-      }, 600);
-    }
+  const startHoldVerde = () => {
+    setActiveColor('verde');
+    holdTimer.current = setTimeout(() => {}, 0);
+    enviarAlerta('verde', 'Todo bien');
   };
 
-  const endHold = () => {
-    clearTimeout(holdTimer);
-    setActiveColor(null);
+  const startHoldAmarillo = () => {
+    setActiveColor('amarillo');
+    setMensajes(mensajesPorColor.amarillo);
+    setShowMessages(true);
+  };
+
+  const startHoldRojo = () => {
+    setRedHolding(true);
+    setRedProgress(0);
+    let progress = 0;
+    redInterval.current = setInterval(() => {
+      progress += 100 / 30;
+      setRedProgress(Math.min(progress, 100));
+      if (progress >= 100) {
+        clearInterval(redInterval.current);
+        setRedHolding(false);
+        setRedProgress(0);
+        enviarAlerta('rojo', 'EMERGENCIA - Necesito ayuda urgente');
+      }
+    }, 100);
+  };
+
+  const endHoldRojo = () => {
+    clearInterval(redInterval.current);
+    setRedHolding(false);
+    setRedProgress(0);
+  };
+
+  const startMsgHold = (msg) => {
+    setSelectedMsg(msg);
+    setMsgProgress(0);
+    let progress = 0;
+    msgTimer.current = setInterval(() => {
+      progress += 100 / 20;
+      setMsgProgress(Math.min(progress, 100));
+      if (progress >= 100) {
+        clearInterval(msgTimer.current);
+        setShowMessages(false);
+        setMsgProgress(0);
+        setSelectedMsg(null);
+        enviarAlerta('amarillo', msg);
+      }
+    }, 100);
+  };
+
+  const endMsgHold = () => {
+    clearInterval(msgTimer.current);
+    setMsgProgress(0);
+    setSelectedMsg(null);
   };
 
   const enviarAlerta = async (color, mensaje) => {
-    setShowMessages(false);
-    alert(`Alerta ${color} enviada: ${mensaje}`);
-  };
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    navigate('/');
+    alert(`Alerta ${color}: ${mensaje}`);
   };
 
   return (
     <div className="home-container">
+      {redHolding && (
+        <div className="red-overlay" style={{ opacity: redProgress / 100 * 0.7 }}>
+          <div className="red-countdown">
+            <div className="red-countdown-number">{Math.ceil(3 - (redProgress / 100 * 3))}</div>
+            <div className="red-countdown-text">Soltá para cancelar</div>
+          </div>
+        </div>
+      )}
+
+      {showMessages && (
+        <div className="messages-overlay">
+          <div className="messages-panel">
+            <p className="messages-title">Elegí un mensaje</p>
+            {mensajes.map((msg, i) => (
+              <button
+                key={i}
+                className="message-option amarillo"
+                onMouseDown={() => startMsgHold(msg)}
+                onMouseUp={endMsgHold}
+                onMouseLeave={endMsgHold}
+                onTouchStart={() => startMsgHold(msg)}
+                onTouchEnd={endMsgHold}
+              >
+                <span className="msg-text">{msg}</span>
+                {selectedMsg === msg && (
+                  <div className="msg-progress-bar" style={{ width: `${msgProgress}%` }} />
+                )}
+              </button>
+            ))}
+            <button className="message-cancel" onClick={() => setShowMessages(false)}>Cancelar</button>
+          </div>
+        </div>
+      )}
+
       <div className="home-header">
         <h1 className="home-title">VySafe</h1>
         <p className="home-subtitle">mantené tu red informada</p>
       </div>
 
-      {showMessages && (
-        <div className="messages-panel">
-          <p className="messages-title">Elegí un mensaje</p>
-          {mensajes.map((msg, i) => (
-            <button key={i} className={`message-option ${activeColor}`} onClick={() => enviarAlerta(activeColor, msg)}>
-              {msg}
-            </button>
-          ))}
-          <button className="message-cancel" onClick={() => setShowMessages(false)}>Cancelar</button>
-        </div>
-      )}
-
       <div className="buttons-container">
         <div className="button-row">
           <span className="button-label">Todo bien</span>
-          <button
-            className={`alert-btn btn-green ${activeColor === 'verde' ? 'pressing' : ''}`}
-            onMouseDown={() => startHold('verde')}
-            onMouseUp={endHold}
-            onMouseLeave={endHold}
-            onTouchStart={() => startHold('verde')}
-            onTouchEnd={endHold}
-          >✓</button>
+          <button className="alert-btn btn-green" onClick={startHoldVerde}>✓</button>
         </div>
 
         <div className="button-row">
           <span className="button-label">Atención</span>
-          <button
-            className={`alert-btn btn-yellow ${activeColor === 'amarillo' ? 'pressing' : ''}`}
-            onMouseDown={() => startHold('amarillo')}
-            onMouseUp={endHold}
-            onMouseLeave={endHold}
-            onTouchStart={() => startHold('amarillo')}
-            onTouchEnd={endHold}
-          >!</button>
+          <button className="alert-btn btn-yellow" onClick={startHoldAmarillo}>!</button>
         </div>
 
         <div className="button-row">
           <span className="button-label">Emergencia</span>
           <button
-            className={`alert-btn btn-red ${activeColor === 'rojo' ? 'pressing' : ''}`}
-            onMouseDown={() => startHold('rojo')}
-            onMouseUp={endHold}
-            onMouseLeave={endHold}
-            onTouchStart={() => startHold('rojo')}
-            onTouchEnd={endHold}
+            className={`alert-btn btn-red ${redHolding ? 'pressing' : ''}`}
+            onMouseDown={startHoldRojo}
+            onMouseUp={endHoldRojo}
+            onMouseLeave={endHoldRojo}
+            onTouchStart={startHoldRojo}
+            onTouchEnd={endHoldRojo}
           >▲</button>
         </div>
       </div>
-
-      <nav className="bottom-nav">
-        <button className="nav-item active">Inicio</button>
-        <button className="nav-item">Contactos</button>
-        <button className="nav-item">Invitar</button>
-        <button className="nav-item">Alertas</button>
-        <button className="nav-item" onClick={handleLogout}>Salir</button>
-      </nav>
     </div>
   );
 }
