@@ -1,5 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { supabase } from '../supabase';
+import React, { useState, useRef } from 'react';
 import '../styles/Home.css';
 
 function Home() {
