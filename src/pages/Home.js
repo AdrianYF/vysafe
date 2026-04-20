@@ -1,5 +1,4 @@
 import React, { useState, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
 import NavBar from '../components/NavBar';
 import Contactos from './Contactos';
 import '../styles/Home.css';
@@ -12,7 +11,6 @@ const mensajesPorColor = {
 function Home() {
   const [showMessages, setShowMessages] = useState(false);
   const [mensajes, setMensajes] = useState([]);
-  const [colorActual, setColorActual] = useState(null);
   const [redProgress, setRedProgress] = useState(0);
   const [redHolding, setRedHolding] = useState(false);
   const [selectedMsg, setSelectedMsg] = useState(null);
@@ -20,10 +18,8 @@ function Home() {
   const [mostrarInvitar, setMostrarInvitar] = useState(false);
   const redInterval = useRef(null);
   const msgTimer = useRef(null);
-  const navigate = useNavigate();
 
   const abrirMensajes = (color) => {
-    setColorActual(color);
     setMensajes(mensajesPorColor[color]);
     setShowMessages(true);
   };
@@ -122,7 +118,6 @@ function Home() {
       )}
 
       <NavBar onInvitar={() => setMostrarInvitar(true)} />
-
     </div>
   );
 }
