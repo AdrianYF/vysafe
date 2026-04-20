@@ -4,7 +4,6 @@ import '../styles/Home.css';
 function Home() {
   const [showMessages, setShowMessages] = useState(false);
   const [mensajes, setMensajes] = useState([]);
-  const [activeColor, setActiveColor] = useState(null);
   const [redProgress, setRedProgress] = useState(0);
   const [redHolding, setRedHolding] = useState(false);
   const [selectedMsg, setSelectedMsg] = useState(null);
