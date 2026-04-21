@@ -125,8 +125,10 @@ function Home() {
           className="btn-rojo"
           onMouseDown={iniciarRojo}
           onMouseUp={cancelarRojo}
+          onMouseLeave={cancelarRojo}
           onTouchStart={iniciarRojo}
           onTouchEnd={cancelarRojo}
+          onTouchCancel={cancelarRojo}
         >
           {redHolding ? `${Math.round(redProgress)}%` : (
             <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="white" strokeWidth="1.8">
