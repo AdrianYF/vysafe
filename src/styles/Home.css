@@ -29,7 +29,7 @@
 
 .buttons-container {
   position: absolute;
-  bottom: 130px;
+  bottom: 160px;
   display: flex;
   flex-direction: column;
   align-items: flex-end;
