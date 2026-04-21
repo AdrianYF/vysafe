@@ -1,33 +1,15 @@
-.navbar-wrapper {
+.navbar {
   position: fixed;
   bottom: 0;
   left: 0;
   width: 100%;
-  z-index: 100;
-}
-
-.btn-espejo {
-  position: absolute;
-  top: -35px;
-  left: 50%;
-  transform: translateX(-50%);
-  background: #333;
-  color: white;
-  border: none;
-  border-radius: 20px;
-  padding: 5px 12px;
-  font-size: 14px;
-  cursor: pointer;
-  opacity: 0.7;
-}
-
-.navbar {
   display: flex;
   justify-content: space-around;
-  align-items: center;
-  background: white;
-  padding: 10px 0 20px 0;
-  border-top: 3px solid red;
+  align-items: flex-end;
+  background: #111111;
+  border-top: 1px solid #222;
+  padding: 10px 0 24px 0;
+  z-index: 100;
 }
 
 .nav-item {
@@ -36,40 +18,45 @@
   align-items: center;
   background: none;
   border: none;
-  color: #333;
+  color: #555;
   cursor: pointer;
-  padding: 5px 10px;
-  border-radius: 10px;
+  padding: 5px 12px;
+  gap: 4px;
   transition: color 0.2s;
 }
 
 .nav-item.activo {
-  color: black;
+  color: #ffffff;
 }
 
 .nav-item-central {
-  background: #4CAF50;
+  background: #9b8ec4;
   color: white !important;
   border-radius: 50%;
-  width: 55px;
-  height: 55px;
-  margin-top: -20px;
-  box-shadow: 0 4px 15px rgba(76, 175, 80, 0.5);
-}
-
-.nav-icon {
-  font-size: 22px;
-}
-
-.nav-item-central .nav-icon {
-  font-size: 26px;
+  width: 58px;
+  height: 58px;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 20px rgba(155, 142, 196, 0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
 }
 
 .nav-label {
   font-size: 10px;
-  margin-top: 3px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
-.nav-item-central .nav-label {
-  display: none;
+.btn-espejo-home {
+  position: absolute;
+  top: 20px;
+  background: rgba(255,255,255,0.08);
+  color: #888;
+  border: none;
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 16px;
+  cursor: pointer;
+  z-index: 10;
 }
