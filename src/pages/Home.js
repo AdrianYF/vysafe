@@ -1,6 +1,7 @@
 import React, { useState, useRef } from 'react';
 import NavBar from '../components/NavBar';
 import Contactos from './Contactos';
+import MenuLateral from '../components/MenuLateral';
 import '../styles/Home.css';
 
 const mensajesPorColor = {
@@ -17,6 +18,7 @@ function Home() {
   const [msgProgress, setMsgProgress] = useState(0);
   const [mostrarInvitar, setMostrarInvitar] = useState(false);
   const [espejado, setEspejado] = useState(false);
+  const [mostrarMenu, setMostrarMenu] = useState(false);
   const redInterval = useRef(null);
   const msgTimer = useRef(null);
 
@@ -89,6 +91,14 @@ function Home() {
         {espejado ? '←' : '→'}
       </button>
 
+      <button
+        className="btn-menu-home"
+        style={{ [espejado ? 'left' : 'right']: 20 }}
+        onClick={() => setMostrarMenu(true)}
+      >
+        ☰
+      </button>
+
       <div className="buttons-container" style={{ [lado]: 24 }}>
         <button className="btn-verde" onClick={() => abrirMensajes('verde')}>
           <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="white" strokeWidth="1.8">
@@ -144,6 +154,8 @@ function Home() {
       {mostrarInvitar && (
         <Contactos soloInvitar={true} onCerrar={() => setMostrarInvitar(false)} />
       )}
+
+      {mostrarMenu && <MenuLateral onCerrar={() => setMostrarMenu(false)} />}
 
       <NavBar onInvitar={() => setMostrarInvitar(true)} espejado={espejado} />
     </div>
