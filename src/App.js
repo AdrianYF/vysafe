@@ -5,6 +5,8 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Home from './pages/Home';
 import Contactos from './pages/Contactos';
+import Historial from './pages/Historial';
+import Notificaciones from './pages/Notificaciones';
 import './App.css';
 
 function App() {
@@ -31,6 +33,8 @@ function App() {
           <Route path="/register" element={<Register />} />
           <Route path="/home" element={session ? <Home /> : <Navigate to="/" />} />
           <Route path="/contactos" element={session ? <Contactos /> : <Navigate to="/" />} />
+          <Route path="/historial" element={session ? <Historial /> : <Navigate to="/" />} />
+          <Route path="/notificaciones" element={session ? <Notificaciones /> : <Navigate to="/" />} />
         </Routes>
       </div>
     </Router>
