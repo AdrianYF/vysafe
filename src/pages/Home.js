@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import NavBar from '../components/NavBar';
 import Contactos from './Contactos';
 import MenuLateral from '../components/MenuLateral';
