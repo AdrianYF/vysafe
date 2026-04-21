@@ -12,6 +12,7 @@ const mensajesPorColor = {
 function Home() {
   const [showMessages, setShowMessages] = useState(false);
   const [mensajes, setMensajes] = useState([]);
+  const [colorActual, setColorActual] = useState(null);
   const [redProgress, setRedProgress] = useState(0);
   const [redHolding, setRedHolding] = useState(false);
   const [selectedMsg, setSelectedMsg] = useState(null);
@@ -19,10 +20,17 @@ function Home() {
   const [mostrarInvitar, setMostrarInvitar] = useState(false);
   const [espejado, setEspejado] = useState(false);
   const [mostrarMenu, setMostrarMenu] = useState(false);
+  const [toast, setToast] = useState(null);
   const redInterval = useRef(null);
   const msgTimer = useRef(null);
 
+  const mostrarToast = (msg) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2500);
+  };
+
   const abrirMensajes = (color) => {
+    setColorActual(color);
     setMensajes(mensajesPorColor[color]);
     setShowMessages(true);
   };
@@ -38,7 +46,7 @@ function Home() {
         clearInterval(redInterval.current);
         setRedHolding(false);
         setRedProgress(0);
-        alert('🚨 ¡Alerta roja enviada!');
+        mostrarToast('🚨 ¡Alerta roja enviada!');
       }
     }, 100);
   };
@@ -61,7 +69,7 @@ function Home() {
         setShowMessages(false);
         setSelectedMsg(null);
         setMsgProgress(0);
-        alert(`✅ Mensaje enviado: "${msg}"`);
+        mostrarToast(`✅ Mensaje enviado: "${msg}"`);
       }
     }, 100);
   };
@@ -131,20 +139,33 @@ function Home() {
       </div>
 
       {showMessages && (
-        <div className="modal-overlay">
-          <div className="modal">
+        <div className="modal-overlay" onClick={() => setShowMessages(false)}>
+          <div className="modal" onClick={(e) => e.stopPropagation()}>
             <h2>¿Qué querés avisar?</h2>
             {mensajes.map((msg) => (
-              <button
-                key={msg}
-                className={`btn-mensaje ${selectedMsg === msg ? 'seleccionado' : ''}`}
-                onMouseDown={() => seleccionarMensaje(msg)}
-                onMouseUp={cancelarMensaje}
-                onTouchStart={() => seleccionarMensaje(msg)}
-                onTouchEnd={cancelarMensaje}
-              >
-                {selectedMsg === msg ? `${Math.round(msgProgress)}%` : msg}
-              </button>
+              colorActual === 'verde' ? (
+                <button
+                  key={msg}
+                  className="btn-mensaje"
+                  onClick={() => {
+                    setShowMessages(false);
+                    mostrarToast(`✅ Mensaje enviado: "${msg}"`);
+                  }}
+                >
+                  {msg}
+                </button>
+              ) : (
+                <button
+                  key={msg}
+                  className={`btn-mensaje ${selectedMsg === msg ? 'seleccionado' : ''}`}
+                  onMouseDown={() => seleccionarMensaje(msg)}
+                  onMouseUp={cancelarMensaje}
+                  onTouchStart={() => seleccionarMensaje(msg)}
+                  onTouchEnd={cancelarMensaje}
+                >
+                  {selectedMsg === msg ? `${Math.round(msgProgress)}%` : msg}
+                </button>
+              )
             ))}
             <button className="btn-cancelar" onClick={() => setShowMessages(false)}>Cancelar</button>
           </div>
@@ -156,6 +177,7 @@ function Home() {
       )}
 
       {mostrarMenu && <MenuLateral onCerrar={() => setMostrarMenu(false)} />}
+      {toast && <div className="toast">{toast}</div>}
 
       <NavBar onInvitar={() => setMostrarInvitar(true)} espejado={espejado} />
     </div>

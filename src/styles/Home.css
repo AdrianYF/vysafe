@@ -181,3 +181,27 @@
   align-items: center;
   justify-content: center;
 }
+
+.toast {
+  position: fixed;
+  bottom: 100px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #1a1a1a;
+  border: 1px solid #333;
+  color: #fff;
+  padding: 14px 24px;
+  border-radius: 14px;
+  font-size: 15px;
+  z-index: 200;
+  text-align: center;
+  animation: fadeInOut 2.5s ease forwards;
+  white-space: nowrap;
+}
+
+@keyframes fadeInOut {
+  0%   { opacity: 0; transform: translateX(-50%) translateY(10px); }
+  15%  { opacity: 1; transform: translateX(-50%) translateY(0); }
+  75%  { opacity: 1; }
+  100% { opacity: 0; }
+}
