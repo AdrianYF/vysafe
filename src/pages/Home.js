@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import NavBar from '../components/NavBar';
 import Contactos from './Contactos';
 import MenuLateral from '../components/MenuLateral';
@@ -13,7 +13,6 @@ function Home() {
   const [showMessages, setShowMessages] = useState(false);
   const [mensajes, setMensajes] = useState([]);
   const [colorActual, setColorActual] = useState(null);
-  const [redProgress, setRedProgress] = useState(0);
   const [redHolding, setRedHolding] = useState(false);
   const [selectedMsg, setSelectedMsg] = useState(null);
   const [msgProgress, setMsgProgress] = useState(0);
@@ -23,6 +22,8 @@ function Home() {
   const [toast, setToast] = useState(null);
   const redInterval = useRef(null);
   const msgTimer = useRef(null);
+  const overlayRef = useRef(null);
+  const progressRef = useRef(0);
 
   const mostrarToast = (msg) => {
     setToast(msg);
@@ -37,15 +38,18 @@ function Home() {
 
   const iniciarRojo = () => {
     setRedHolding(true);
-    setRedProgress(0);
-    let progress = 0;
+    progressRef.current = 0;
+    if (overlayRef.current) overlayRef.current.style.opacity = 0;
     redInterval.current = setInterval(() => {
-      progress += 100 / 30;
-      setRedProgress(progress);
-      if (progress >= 100) {
+      progressRef.current += 100 / 30;
+      if (overlayRef.current) {
+        overlayRef.current.style.opacity = progressRef.current / 200;
+      }
+      if (progressRef.current >= 100) {
         clearInterval(redInterval.current);
         setRedHolding(false);
-        setRedProgress(0);
+        progressRef.current = 0;
+        if (overlayRef.current) overlayRef.current.style.opacity = 0;
         mostrarToast('🚨 ¡Alerta roja enviada!');
       }
     }, 100);
@@ -54,7 +58,8 @@ function Home() {
   const cancelarRojo = () => {
     clearInterval(redInterval.current);
     setRedHolding(false);
-    setRedProgress(0);
+    progressRef.current = 0;
+    if (overlayRef.current) overlayRef.current.style.opacity = 0;
   };
 
   const seleccionarMensaje = (msg) => {
@@ -84,7 +89,7 @@ function Home() {
 
   return (
     <div className="home-container">
-      {redHolding && <div className="red-overlay" style={{ opacity: redProgress / 200 }} />}
+      <div ref={overlayRef} className="red-overlay" />
 
       <div className="header">
         <h1>VySafe</h1>
@@ -130,7 +135,7 @@ function Home() {
           onTouchEnd={cancelarRojo}
           onTouchCancel={cancelarRojo}
         >
-          {redHolding ? `${Math.round(redProgress)}%` : (
+          {redHolding ? `${Math.round(progressRef.current)}%` : (
             <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="white" strokeWidth="1.8">
               <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
               <line x1="12" y1="9" x2="12" y2="13"/>

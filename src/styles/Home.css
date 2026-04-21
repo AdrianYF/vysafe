@@ -85,6 +85,8 @@
   background: #e74c3c;
   z-index: 50;
   pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.1s linear;
 }
 
 .modal-overlay {
@@ -140,8 +142,8 @@
 }
 
 .btn-espejo-home {
-  position: absolute;
-  top: 20px;
+  position: fixed;
+  top: 16px;
   background: rgba(255,255,255,0.08);
   color: #888;
   border: none;
@@ -149,20 +151,7 @@
   padding: 6px 10px;
   font-size: 16px;
   cursor: pointer;
-  z-index: 10;
-}
-
-.btn-menu-home {
-  position: absolute;
-  top: 20px;
-  background: rgba(255,255,255,0.08);
-  color: #888;
-  border: none;
-  border-radius: 8px;
-  padding: 6px 10px;
-  font-size: 18px;
-  cursor: pointer;
-  z-index: 10;
+  z-index: 100;
 }
 
 .btn-menu-home {
