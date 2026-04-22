@@ -14,6 +14,7 @@ function Home() {
   const [mensajes, setMensajes] = useState([]);
   const [colorActual, setColorActual] = useState(null);
   const [redHolding, setRedHolding] = useState(false);
+  const [redCountdown, setRedCountdown] = useState(3);
   const [selectedMsg, setSelectedMsg] = useState(null);
   const [msgProgress, setMsgProgress] = useState(0);
   const [mostrarInvitar, setMostrarInvitar] = useState(false);
@@ -38,16 +39,23 @@ function Home() {
 
   const iniciarRojo = () => {
     setRedHolding(true);
+    setRedCountdown(3);
     progressRef.current = 0;
     if (overlayRef.current) overlayRef.current.style.opacity = 0;
+
     redInterval.current = setInterval(() => {
       progressRef.current += 100 / 30;
+      const nuevoSegundo = Math.ceil(3 - (progressRef.current / 100) * 3);
+      setRedCountdown(nuevoSegundo);
+
       if (overlayRef.current) {
         overlayRef.current.style.opacity = progressRef.current / 200;
       }
+
       if (progressRef.current >= 100) {
         clearInterval(redInterval.current);
         setRedHolding(false);
+        setRedCountdown(3);
         progressRef.current = 0;
         if (overlayRef.current) overlayRef.current.style.opacity = 0;
         mostrarToast('🚨 ¡Alerta roja enviada!');
@@ -58,6 +66,7 @@ function Home() {
   const cancelarRojo = () => {
     clearInterval(redInterval.current);
     setRedHolding(false);
+    setRedCountdown(3);
     progressRef.current = 0;
     if (overlayRef.current) overlayRef.current.style.opacity = 0;
   };
@@ -90,6 +99,12 @@ function Home() {
   return (
     <div className="home-container">
       <div ref={overlayRef} className="red-overlay" />
+
+      {redHolding && (
+        <div className="red-countdown">
+          <span>{redCountdown}</span>
+        </div>
+      )}
 
       <div className="header">
         <h1>VySafe</h1>
@@ -135,13 +150,11 @@ function Home() {
           onTouchEnd={cancelarRojo}
           onTouchCancel={cancelarRojo}
         >
-          {redHolding ? `${Math.round(progressRef.current)}%` : (
-            <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="white" strokeWidth="1.8">
-              <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-              <line x1="12" y1="9" x2="12" y2="13"/>
-              <circle cx="12" cy="17" r="1" fill="white"/>
-            </svg>
-          )}
+          <svg viewBox="0 0 24 24" width="36" height="36" fill="none" stroke="white" strokeWidth="1.8">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+            <line x1="12" y1="9" x2="12" y2="13"/>
+            <circle cx="12" cy="17" r="1" fill="white"/>
+          </svg>
         </button>
       </div>
 
@@ -164,13 +177,17 @@ function Home() {
               ) : (
                 <button
                   key={msg}
-                  className={`btn-mensaje ${selectedMsg === msg ? 'seleccionado' : ''}`}
+                  className="btn-mensaje"
                   onMouseDown={() => seleccionarMensaje(msg)}
                   onMouseUp={cancelarMensaje}
                   onTouchStart={() => seleccionarMensaje(msg)}
                   onTouchEnd={cancelarMensaje}
                 >
-                  {selectedMsg === msg ? `${Math.round(msgProgress)}%` : msg}
+                  <div
+                    className="btn-mensaje-barra"
+                    style={{ width: selectedMsg === msg ? `${msgProgress}%` : '0%' }}
+                  />
+                  <span style={{ position: 'relative', zIndex: 1 }}>{msg}</span>
                 </button>
               )
             ))}
