@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../supabase';
+import { QRCodeSVG } from 'qrcode.react';
 import NavBar from '../components/NavBar';
 import './Contactos.css';
 
@@ -7,10 +8,17 @@ export default function Contactos({ soloInvitar = false, onCerrar = null }) {
   const [contactos, setContactos] = useState([]);
   const [loading, setLoading] = useState(true);
   const [mostrarOpciones, setMostrarOpciones] = useState(soloInvitar);
+  const [toast, setToast] = useState(null);
+  const [linkGenerado, setLinkGenerado] = useState(null);
 
   useEffect(() => {
     if (!soloInvitar) cargarContactos();
   }, [soloInvitar]);
+
+  function mostrarToast(msg) {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
+  }
 
   async function cargarContactos() {
     const { data: { user } } = await supabase.auth.getUser();
@@ -33,34 +41,95 @@ export default function Contactos({ soloInvitar = false, onCerrar = null }) {
       alerta_amarilla: alertas.includes('amarilla'),
       alerta_roja: alertas.includes('roja'),
     });
+
     if (!error) {
       const link = `${window.location.origin}/unirse/${token}`;
-      await navigator.clipboard.writeText(link);
-      alert('¡Link copiado! Mandáselo a tu contacto.');
+      setLinkGenerado(link);
+      setMostrarOpciones(false);
     }
-    setMostrarOpciones(false);
-    if (onCerrar) onCerrar();
   }
 
   function cerrar() {
+    setLinkGenerado(null);
     setMostrarOpciones(false);
     if (onCerrar) onCerrar();
   }
 
+  const ModalInvitar = () => (
+    <div className="modal-overlay" onClick={cerrar}>
+      <div className="modal" onClick={(e) => e.stopPropagation()}>
+        <h2>¿Cómo querés invitarlo?</h2>
+        <button className="btn-opcion" onClick={() => generarInvitacion('red', [])}>
+          👥 Solo invitar a mi red
+        </button>
+        <button className="btn-opcion alerta" onClick={() => generarInvitacion('alerta', ['verde', 'amarilla', 'roja'])}>
+          🚨 Invitar como contacto de alerta
+        </button>
+        <button className="btn-cancelar" onClick={cerrar}>Cancelar</button>
+      </div>
+    </div>
+  );
+
+  const ModalLink = ({ onCerrarModal }) => (
+    <div className="modal-overlay" onClick={onCerrarModal}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} style={{ position: 'relative' }}>
+        <button
+          onClick={onCerrarModal}
+          style={{
+            position: 'absolute',
+            top: 12,
+            right: 12,
+            background: 'transparent',
+            border: 'none',
+            color: '#888',
+            fontSize: 20,
+            cursor: 'pointer',
+            lineHeight: 1,
+          }}
+        >✕</button>
+        <h2>¡Link generado! 🎉</h2>
+        <p style={{ color: '#888', fontSize: 13, marginBottom: 16 }}>
+          Escaneá el QR o copiá el link
+        </p>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
+          <QRCodeSVG
+            value={linkGenerado}
+            size={180}
+            bgColor="#1a1a1a"
+            fgColor="#ffffff"
+            level="H"
+          />
+        </div>
+        <button
+          style={{
+            width: '100%',
+            padding: '14px',
+            borderRadius: '12px',
+            border: 'none',
+            background: '#2ecc71',
+            color: '#fff',
+            fontSize: '16px',
+            fontWeight: '600',
+            cursor: 'pointer',
+          }}
+          onClick={() => {
+            navigator.clipboard.writeText(linkGenerado).catch(() => {});
+            mostrarToast('✅ Link copiado');
+          }}
+        >
+          Copiar link
+        </button>
+      </div>
+    </div>
+  );
+
   if (soloInvitar) {
     return (
-      <div className="modal-overlay">
-        <div className="modal">
-          <h2>¿Cómo querés invitarlo?</h2>
-          <button className="btn-opcion" onClick={() => generarInvitacion('red', [])}>
-            👥 Solo invitar a mi red
-          </button>
-          <button className="btn-opcion alerta" onClick={() => generarInvitacion('alerta', ['verde', 'amarilla', 'roja'])}>
-            🚨 Invitar como contacto de alerta
-          </button>
-          <button className="btn-cancelar" onClick={cerrar}>Cancelar</button>
-        </div>
-      </div>
+      <>
+        {mostrarOpciones && <ModalInvitar />}
+        {linkGenerado && <ModalLink onCerrarModal={cerrar} />}
+        {toast && <div className="toast-contactos">{toast}</div>}
+      </>
     );
   }
 
@@ -87,22 +156,9 @@ export default function Contactos({ soloInvitar = false, onCerrar = null }) {
         + Invitar contacto
       </button>
 
-      {mostrarOpciones && (
-        <div className="modal-overlay">
-          <div className="modal">
-            <h2>¿Cómo querés invitarlo?</h2>
-            <button className="btn-opcion" onClick={() => generarInvitacion('red', [])}>
-              👥 Solo invitar a mi red
-            </button>
-            <button className="btn-opcion alerta" onClick={() => generarInvitacion('alerta', ['verde', 'amarilla', 'roja'])}>
-              🚨 Invitar como contacto de alerta
-            </button>
-            <button className="btn-cancelar" onClick={() => setMostrarOpciones(false)}>
-              Cancelar
-            </button>
-          </div>
-        </div>
-      )}
+      {mostrarOpciones && <ModalInvitar />}
+      {linkGenerado && <ModalLink onCerrarModal={() => setLinkGenerado(null)} />}
+      {toast && <div className="toast-contactos">{toast}</div>}
 
       <NavBar />
     </div>
