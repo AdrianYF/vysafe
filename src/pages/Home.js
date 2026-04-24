@@ -9,6 +9,12 @@ const mensajesPorColor = {
   amarillo: ['Saliendo de casa', 'Subiendo al colectivo', 'Caminando, todo bien'],
 };
 
+const contactosMock = [
+  { id: 1, nombre: 'María' },
+  { id: 2, nombre: 'Juan' },
+  { id: 3, nombre: 'Laura' },
+];
+
 function Home() {
   const [showMessages, setShowMessages] = useState(false);
   const [mensajes, setMensajes] = useState([]);
@@ -20,15 +26,33 @@ function Home() {
   const [mostrarInvitar, setMostrarInvitar] = useState(false);
   const [espejado, setEspejado] = useState(false);
   const [mostrarMenu, setMostrarMenu] = useState(false);
-  const [toast, setToast] = useState(null);
+  const [confirmacion, setConfirmacion] = useState(null);
+  const [cerrarProgress, setCerrarProgress] = useState(0);
   const redInterval = useRef(null);
   const msgTimer = useRef(null);
+  const cerrarTimer = useRef(null);
   const overlayRef = useRef(null);
   const progressRef = useRef(0);
 
-  const mostrarToast = (msg) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 2500);
+  const mostrarConfirmacion = (msg) => {
+    setConfirmacion(msg);
+    setCerrarProgress(0);
+    let progress = 0;
+    cerrarTimer.current = setInterval(() => {
+      progress += 100 / 50;
+      setCerrarProgress(progress);
+      if (progress >= 100) {
+        clearInterval(cerrarTimer.current);
+        setConfirmacion(null);
+        setCerrarProgress(0);
+      }
+    }, 100);
+  };
+
+  const cerrarConfirmacion = () => {
+    clearInterval(cerrarTimer.current);
+    setConfirmacion(null);
+    setCerrarProgress(0);
   };
 
   const abrirMensajes = (color) => {
@@ -58,7 +82,7 @@ function Home() {
         setRedCountdown(3);
         progressRef.current = 0;
         if (overlayRef.current) overlayRef.current.style.opacity = 0;
-        mostrarToast('🚨 ¡Alerta roja enviada!');
+        mostrarConfirmacion('🚨 Alerta de emergencia');
       }
     }, 100);
   };
@@ -83,7 +107,7 @@ function Home() {
         setShowMessages(false);
         setSelectedMsg(null);
         setMsgProgress(0);
-        mostrarToast(`✅ Mensaje enviado: "${msg}"`);
+        mostrarConfirmacion(msg);
       }
     }, 100);
   };
@@ -169,7 +193,7 @@ function Home() {
                   className="btn-mensaje"
                   onClick={() => {
                     setShowMessages(false);
-                    mostrarToast(`✅ Mensaje enviado: "${msg}"`);
+                    mostrarConfirmacion(msg);
                   }}
                 >
                   {msg}
@@ -196,12 +220,35 @@ function Home() {
         </div>
       )}
 
+      {confirmacion && (
+        <div className="confirmacion-overlay">
+          <div className="confirmacion-modal">
+            <p className="confirmacion-titulo">Tu alerta</p>
+            <p className="confirmacion-mensaje">{confirmacion}</p>
+            <p className="confirmacion-subtitulo">fue enviada a</p>
+            <div className="confirmacion-contactos">
+              {contactosMock.map((c) => (
+                <div key={c.id} className="confirmacion-avatar">
+                  {c.nombre.charAt(0)}
+                </div>
+              ))}
+            </div>
+            <button className="btn-cerrar-confirmacion" onClick={cerrarConfirmacion}>
+              <div
+                className="btn-cerrar-barra"
+                style={{ width: `${cerrarProgress}%` }}
+              />
+              <span style={{ position: 'relative', zIndex: 1 }}>Cerrar</span>
+            </button>
+          </div>
+        </div>
+      )}
+
       {mostrarInvitar && (
         <Contactos soloInvitar={true} onCerrar={() => setMostrarInvitar(false)} />
       )}
 
       {mostrarMenu && <MenuLateral onCerrar={() => setMostrarMenu(false)} />}
-      {toast && <div className="toast">{toast}</div>}
 
       <NavBar onInvitar={() => setMostrarInvitar(true)} espejado={espejado} />
     </div>
