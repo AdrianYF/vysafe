@@ -86,7 +86,6 @@ export default function Unirse() {
     }
 
     const nombreUsuario = user.user_metadata?.full_name || user.user_metadata?.nombre || user.email;
-    const avatarUsuario = user.user_metadata?.avatar_url || null;
 
     // Insertar en la cuenta del invitador
     await supabase.from('contactos').insert({
