@@ -6,15 +6,41 @@ export default function Unirse() {
   const { token } = useParams();
   const navigate = useNavigate();
   const [estado, setEstado] = useState('cargando');
-  const [invitacion, setInvitacion] = useState(null);
+  const [invitador, setInvitador] = useState(null);
   const [nombreInvitador, setNombreInvitador] = useState('');
   const [sessionActiva, setSessionActiva] = useState(null);
   const [procesando, setProcesando] = useState(false);
+  const [esPermanente, setEsPermanente] = useState(false);
 
   const verificarToken = useCallback(async () => {
     const { data: { session } } = await supabase.auth.getSession();
     setSessionActiva(session);
 
+    // Primero buscar en perfiles (link permanente)
+    const { data: perfil } = await supabase
+      .from('perfiles')
+      .select('id, invite_token')
+      .eq('invite_token', token)
+      .maybeSingle();
+
+    if (perfil) {
+      setInvitador({ invitador_id: perfil.id });
+      setEsPermanente(true);
+
+      // Buscar nombre del invitador
+      const { data: contactoData } = await supabase
+        .from('contactos')
+        .select('nombre, avatar_url')
+        .eq('usuario_id', perfil.id)
+        .limit(1)
+        .maybeSingle();
+
+      if (contactoData?.nombre) setNombreInvitador(contactoData.nombre);
+      setEstado('valido');
+      return;
+    }
+
+    // Si no es permanente, buscar en invitaciones
     const { data, error } = await supabase
       .from('invitaciones')
       .select('*')
@@ -27,11 +53,7 @@ export default function Unirse() {
     }
 
     if (data.usado) {
-      if (session) {
-        setEstado('ya_aceptado');
-      } else {
-        setEstado('usado');
-      }
+      setEstado(session ? 'ya_aceptado' : 'usado');
       return;
     }
 
@@ -40,20 +62,7 @@ export default function Unirse() {
       return;
     }
 
-    setInvitacion(data);
-
-    // Buscar nombre del invitador desde sus contactos
-    const { data: perfilData } = await supabase
-      .from('contactos')
-      .select('nombre')
-      .eq('usuario_id', data.invitador_id)
-      .limit(1)
-      .maybeSingle();
-
-    if (perfilData?.nombre) {
-      setNombreInvitador(perfilData.nombre);
-    }
-
+    setInvitador(data);
     setEstado('valido');
   }, [token]);
 
@@ -73,12 +82,20 @@ export default function Unirse() {
     }
 
     const user = session.user;
+    const invitadorId = invitador.invitador_id || invitador.invitador_id;
+
+    // Evitar que alguien se agregue a sí mismo
+    if (user.id === invitadorId) {
+      setProcesando(false);
+      navigate('/home');
+      return;
+    }
 
     // Verificar duplicados
     const { data: yaExiste } = await supabase
       .from('contactos')
       .select('id')
-      .eq('usuario_id', invitacion.invitador_id)
+      .eq('usuario_id', invitadorId)
       .eq('contacto_id', user.id)
       .maybeSingle();
 
@@ -93,50 +110,44 @@ export default function Unirse() {
 
     // Insertar en la cuenta del invitador
     await supabase.from('contactos').insert({
-      usuario_id: invitacion.invitador_id,
+      usuario_id: invitadorId,
       contacto_id: user.id,
       nombre: nombreUsuario,
       avatar_url: avatarUsuario,
-      tipo: invitacion.tipo,
-      alerta_verde: invitacion.alerta_verde,
-      alerta_amarilla: invitacion.alerta_amarilla,
-      alerta_roja: invitacion.alerta_roja,
+      tipo: 'alerta',
+      alerta_verde: true,
+      alerta_amarilla: true,
+      alerta_roja: true,
     });
 
-    // Buscar avatar del invitador
-    const { data: datosInvitador } = await supabase
-      .from('contactos')
-      .select('nombre, avatar_url')
-      .eq('contacto_id', invitacion.invitador_id)
-      .limit(1)
-      .maybeSingle();
-
-    // Insertar espejo en la cuenta del que acepta
+    // Insertar espejo
     const { data: yaExisteEspejo } = await supabase
       .from('contactos')
       .select('id')
       .eq('usuario_id', user.id)
-      .eq('contacto_id', invitacion.invitador_id)
+      .eq('contacto_id', invitadorId)
       .maybeSingle();
 
     if (!yaExisteEspejo) {
       await supabase.from('contactos').insert({
         usuario_id: user.id,
-        contacto_id: invitacion.invitador_id,
-        nombre: nombreInvitador || datosInvitador?.nombre || 'Contacto VySafe',
-        avatar_url: datosInvitador?.avatar_url || null,
-        tipo: invitacion.tipo,
-        alerta_verde: invitacion.alerta_verde,
-        alerta_amarilla: invitacion.alerta_amarilla,
-        alerta_roja: invitacion.alerta_roja,
+        contacto_id: invitadorId,
+        nombre: nombreInvitador || 'Contacto VySafe',
+        avatar_url: null,
+        tipo: 'alerta',
+        alerta_verde: true,
+        alerta_amarilla: true,
+        alerta_roja: true,
       });
     }
 
-    // Marcar invitación como usada
-    await supabase
-      .from('invitaciones')
-      .update({ usado: true })
-      .eq('token', token);
+    // Solo marcar como usado si NO es permanente
+    if (!esPermanente) {
+      await supabase
+        .from('invitaciones')
+        .update({ usado: true })
+        .eq('token', token);
+    }
 
     // Notificar al invitador
     try {
@@ -144,10 +155,7 @@ export default function Unirse() {
       await fetch('/api/enviar-alerta', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          mensaje,
-          contactos: [invitacion.invitador_id],
-        }),
+        body: JSON.stringify({ mensaje, contactos: [invitadorId] }),
       });
     } catch (e) {
       console.error('Error enviando notificación:', e);
