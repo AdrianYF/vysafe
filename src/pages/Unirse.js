@@ -8,8 +8,12 @@ export default function Unirse() {
   const [estado, setEstado] = useState('cargando');
   const [invitacion, setInvitacion] = useState(null);
   const [nombreInvitador, setNombreInvitador] = useState('');
+  const [sessionActiva, setSessionActiva] = useState(null);
 
   const verificarToken = useCallback(async () => {
+    const { data: { session } } = await supabase.auth.getSession();
+    setSessionActiva(session);
+
     const { data, error } = await supabase
       .from('invitaciones')
       .select('*')
@@ -22,7 +26,11 @@ export default function Unirse() {
     }
 
     if (data.usado) {
-      setEstado('usado');
+      if (session) {
+        setEstado('ya_aceptado');
+      } else {
+        setEstado('usado');
+      }
       return;
     }
 
@@ -33,22 +41,16 @@ export default function Unirse() {
 
     setInvitacion(data);
 
-    // Buscar nombre del invitador
-    const { data: userData } = await supabase
+    // Buscar nombre del invitador en metadata
+    const { data: perfilData } = await supabase
       .from('contactos')
       .select('nombre')
-      .eq('contacto_id', data.invitador_id)
+      .eq('usuario_id', data.invitador_id)
       .limit(1)
-      .single();
+      .maybeSingle();
 
-    if (userData?.nombre) {
-      setNombreInvitador(userData.nombre);
-    } else {
-      // Buscar en auth users por metadata
-      const { data: authData } = await supabase.auth.admin?.getUserById?.(data.invitador_id);
-      if (authData?.user?.user_metadata?.nombre) {
-        setNombreInvitador(authData.user.user_metadata.nombre);
-      }
+    if (perfilData?.nombre) {
+      setNombreInvitador(perfilData.nombre);
     }
 
     setEstado('valido');
@@ -59,12 +61,14 @@ export default function Unirse() {
   }, [verificarToken]);
 
   async function aceptarInvitacion() {
-    const { data: { user } } = await supabase.auth.getUser();
+    const { data: { session } } = await supabase.auth.getSession();
 
-    if (!user) {
+    if (!session) {
       navigate(`/register?redirect=/unirse/${token}`);
       return;
     }
+
+    const user = session.user;
 
     const { error } = await supabase.from('contactos').insert({
       usuario_id: invitacion.invitador_id,
@@ -125,6 +129,7 @@ export default function Unirse() {
     fontWeight: '600',
     cursor: 'pointer',
     marginTop: '8px',
+    width: '100%',
   };
 
   const estiloBtnSecundario = {
@@ -136,6 +141,7 @@ export default function Unirse() {
     fontSize: '16px',
     cursor: 'pointer',
     marginTop: '4px',
+    width: '100%',
   };
 
   if (estado === 'cargando') return (
@@ -148,6 +154,16 @@ export default function Unirse() {
     <div style={estiloContainer}>
       <span style={{ fontSize: 48 }}>🔒</span>
       <p>Este link ya fue usado.</p>
+      <button style={estiloBtn} onClick={() => navigate('/')}>Ir a VySafe</button>
+    </div>
+  );
+
+  if (estado === 'ya_aceptado') return (
+    <div style={estiloContainer}>
+      <span style={{ fontSize: 48 }}>✅</span>
+      <p style={{ fontSize: 20, fontWeight: 700 }}>¡Ya sos contacto!</p>
+      <p style={{ color: '#888' }}>Esta invitación ya fue aceptada.</p>
+      <button style={estiloBtn} onClick={() => navigate('/home')}>Ir a VySafe</button>
     </div>
   );
 
@@ -155,6 +171,7 @@ export default function Unirse() {
     <div style={estiloContainer}>
       <span style={{ fontSize: 48 }}>⏰</span>
       <p>Este link expiró.</p>
+      <button style={estiloBtn} onClick={() => navigate('/')}>Ir a VySafe</button>
     </div>
   );
 
@@ -162,6 +179,7 @@ export default function Unirse() {
     <div style={estiloContainer}>
       <span style={{ fontSize: 48 }}>❌</span>
       <p>Link inválido.</p>
+      <button style={estiloBtn} onClick={() => navigate('/')}>Ir a VySafe</button>
     </div>
   );
 
@@ -179,14 +197,25 @@ export default function Unirse() {
       <span style={{ fontSize: 48 }}>🤝</span>
       <p style={{ fontSize: 20, fontWeight: 700 }}>Te invitaron a VySafe</p>
       {nombreInvitador ? (
-        <p style={{ color: '#aaa' }}><strong style={{ color: '#fff' }}>{nombreInvitador}</strong> quiere mantenerte informado sobre su seguridad.</p>
+        <p style={{ color: '#aaa' }}>
+          <strong style={{ color: '#fff' }}>{nombreInvitador}</strong> quiere mantenerte informado sobre su seguridad.
+        </p>
       ) : (
         <p style={{ color: '#888' }}>Alguien quiere mantenerte informado sobre su seguridad.</p>
       )}
-      <button style={estiloBtn} onClick={aceptarInvitacion}>Aceptar invitación</button>
-      <button style={estiloBtnSecundario} onClick={() => navigate(`/register?redirect=/unirse/${token}`)}>
-        No tengo cuenta — Registrarme
+      <button style={estiloBtn} onClick={aceptarInvitacion}>
+        {sessionActiva ? 'Aceptar invitación' : 'Aceptar invitación'}
       </button>
+      {!sessionActiva && (
+        <button style={estiloBtnSecundario} onClick={() => navigate(`/register?redirect=/unirse/${token}`)}>
+          No tengo cuenta — Registrarme
+        </button>
+      )}
+      {sessionActiva && (
+        <p style={{ color: '#555', fontSize: 13 }}>
+          Entrando como {sessionActiva.user?.email}
+        </p>
+      )}
     </div>
   );
 }
