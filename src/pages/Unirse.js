@@ -187,7 +187,7 @@ export default function Unirse() {
       <span style={{ fontSize: 48 }}>🎉</span>
       <p style={{ fontSize: 20, fontWeight: 700 }}>¡Te uniste!</p>
       <p style={{ color: '#888' }}>Ya sos parte de la red VySafe de tu contacto.</p>
-      <button style={estiloBtn} onClick={() => navigate('/')}>Abrir VySafe</button>
+      <button style={estiloBtn} onClick={() => navigate('/home')}>Abrir VySafe</button>
     </div>
   );
 
