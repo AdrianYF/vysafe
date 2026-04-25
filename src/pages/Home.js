@@ -1,4 +1,5 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { supabase } from '../supabase';
 import NavBar from '../components/NavBar';
 import Contactos from './Contactos';
 import MenuLateral from '../components/MenuLateral';
@@ -8,12 +9,6 @@ const mensajesPorColor = {
   verde: ['Llegué bien a destino', 'Estoy en lugar seguro', 'Todo tranquilo'],
   amarillo: ['Saliendo de casa', 'Subiendo al colectivo', 'Caminando, todo bien'],
 };
-
-const contactosMock = [
-  { id: 1, nombre: 'María' },
-  { id: 2, nombre: 'Juan' },
-  { id: 3, nombre: 'Laura' },
-];
 
 function Home() {
   const [showMessages, setShowMessages] = useState(false);
@@ -28,11 +23,25 @@ function Home() {
   const [mostrarMenu, setMostrarMenu] = useState(false);
   const [confirmacion, setConfirmacion] = useState(null);
   const [cerrarProgress, setCerrarProgress] = useState(0);
+  const [contactos, setContactos] = useState([]);
   const redInterval = useRef(null);
   const msgTimer = useRef(null);
   const cerrarTimer = useRef(null);
   const overlayRef = useRef(null);
   const progressRef = useRef(0);
+
+  useEffect(() => {
+    cargarContactos();
+  }, []);
+
+  async function cargarContactos() {
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data, error } = await supabase
+      .from('contactos')
+      .select('*')
+      .eq('usuario_id', user.id);
+    if (!error) setContactos(data);
+  }
 
   const mostrarConfirmacion = (msg) => {
     setConfirmacion(msg);
@@ -227,11 +236,15 @@ function Home() {
             <p className="confirmacion-mensaje">{confirmacion}</p>
             <p className="confirmacion-subtitulo">fue enviada a</p>
             <div className="confirmacion-contactos">
-              {contactosMock.map((c) => (
-                <div key={c.id} className="confirmacion-avatar">
-                  {c.nombre.charAt(0)}
-                </div>
-              ))}
+              {contactos.length === 0 ? (
+                <p style={{ color: '#555', fontSize: 13 }}>Sin contactos aún</p>
+              ) : (
+                contactos.map((c) => (
+                  <div key={c.id} className="confirmacion-avatar">
+                    {(c.nombre || 'S').charAt(0).toUpperCase()}
+                  </div>
+                ))
+              )}
             </div>
             <button className="btn-cerrar-confirmacion" onClick={cerrarConfirmacion}>
               <div

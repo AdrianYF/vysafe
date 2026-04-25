@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../supabase';
 import '../styles/Auth.css';
 
@@ -9,6 +9,12 @@ function Login() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const getRedirect = () => {
+    const params = new URLSearchParams(location.search);
+    return params.get('redirect') || '/home';
+  };
 
   const handleLogin = async (e) => {
     e.preventDefault();
@@ -18,16 +24,17 @@ function Login() {
     if (error) {
       setError('Email o contraseña incorrectos');
     } else {
-      navigate('/home');
+      navigate(getRedirect());
     }
     setLoading(false);
   };
 
   const handleGoogleLogin = async () => {
+    const redirect = getRedirect();
     await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: 'https://vysafe.com/home',
+        redirectTo: `https://vysafe.com${redirect}`,
       },
     });
   };
