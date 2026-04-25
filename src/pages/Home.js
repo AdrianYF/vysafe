@@ -1,16 +1,25 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase';
 import NavBar from '../components/NavBar';
 import Contactos from './Contactos';
 import MenuLateral from '../components/MenuLateral';
 import '../styles/Home.css';
 
-const mensajesPorColor = {
-  verde: ['Llegué bien a destino', 'Estoy en lugar seguro', 'Todo tranquilo'],
-  amarillo: ['Saliendo de casa', 'Subiendo al colectivo', 'Caminando, todo bien'],
+const defaultConfig = {
+  verde: {
+    mensajes: ['Llegué bien a destino', 'Estoy en lugar seguro', 'Todo tranquilo'],
+    contactosPorMensaje: [{}, {}, {}],
+  },
+  amarillo: {
+    mensajes: ['Saliendo de casa', 'Subiendo al colectivo', 'Caminando, todo bien'],
+    contactosPorMensaje: [{}, {}, {}],
+  },
+  rojo: { contactos: [] },
 };
 
 function Home() {
+  const navigate = useNavigate();
   const [showMessages, setShowMessages] = useState(false);
   const [mensajes, setMensajes] = useState([]);
   const [colorActual, setColorActual] = useState(null);
@@ -24,6 +33,8 @@ function Home() {
   const [confirmacion, setConfirmacion] = useState(null);
   const [cerrarProgress, setCerrarProgress] = useState(0);
   const [contactos, setContactos] = useState([]);
+  const [config, setConfig] = useState(defaultConfig);
+  const [mensajeIndex, setMensajeIndex] = useState(null);
   const redInterval = useRef(null);
   const msgTimer = useRef(null);
   const cerrarTimer = useRef(null);
@@ -31,28 +42,64 @@ function Home() {
   const progressRef = useRef(0);
 
   useEffect(() => {
-    cargarContactos();
+    cargarTodo();
   }, []);
 
-  async function cargarContactos() {
+  async function cargarTodo() {
     const { data: { user } } = await supabase.auth.getUser();
-    const { data, error } = await supabase
+
+    const { data: contactosData } = await supabase
       .from('contactos')
       .select('*')
       .eq('usuario_id', user.id);
-    if (!error) setContactos(data || []);
+    setContactos(contactosData || []);
+
+    const { data: configData } = await supabase
+      .from('config_alertas')
+      .select('*')
+      .eq('usuario_id', user.id);
+
+    if (configData && configData.length > 0) {
+      setConfig(armarConfig(configData));
+    }
   }
 
-  async function enviarAlerta(mensaje, tipoAlerta) {
+  function armarConfig(rows) {
+    const cfg = {
+      verde: { mensajes: [...defaultConfig.verde.mensajes], contactosPorMensaje: [{}, {}, {}] },
+      amarillo: { mensajes: [...defaultConfig.amarillo.mensajes], contactosPorMensaje: [{}, {}, {}] },
+      rojo: { contactos: [] },
+    };
+
+    rows.forEach(row => {
+      if (row.color === 'rojo') {
+        cfg.rojo.contactos = row.contactos ? row.contactos.split(',').filter(Boolean) : [];
+      } else {
+        const i = row.mensaje_index;
+        if (cfg[row.color]) {
+          if (row.mensaje_texto) cfg[row.color].mensajes[i] = row.mensaje_texto;
+          if (row.contactos) {
+            cfg[row.color].contactosPorMensaje[i] = {};
+            row.contactos.split(',').filter(Boolean).forEach(id => {
+              cfg[row.color].contactosPorMensaje[i][id] = true;
+            });
+          }
+        }
+      }
+    });
+
+    return cfg;
+  }
+
+  async function enviarAlerta(mensaje, tipoAlerta, msgIdx) {
     try {
-      const contactosDestino = contactos
-        .filter(c => {
-          if (tipoAlerta === 'verde') return c.alerta_verde;
-          if (tipoAlerta === 'amarillo') return c.alerta_amarilla;
-          if (tipoAlerta === 'rojo') return c.alerta_roja;
-          return true;
-        })
-        .map(c => c.contacto_id);
+      let contactosDestino = [];
+      if (tipoAlerta === 'rojo') {
+        contactosDestino = config.rojo.contactos;
+      } else {
+        const mapa = config[tipoAlerta]?.contactosPorMensaje?.[msgIdx] || {};
+        contactosDestino = Object.keys(mapa);
+      }
 
       if (contactosDestino.length === 0) return;
 
@@ -66,9 +113,9 @@ function Home() {
     }
   }
 
-  const mostrarConfirmacion = (msg, tipoAlerta) => {
-    enviarAlerta(msg, tipoAlerta);
-    setConfirmacion(msg);
+  const mostrarConfirmacion = (msg, tipoAlerta, msgIdx) => {
+    enviarAlerta(msg, tipoAlerta, msgIdx);
+    setConfirmacion({ msg, tipoAlerta, msgIdx });
     setCerrarProgress(0);
     let progress = 0;
     cerrarTimer.current = setInterval(() => {
@@ -90,7 +137,7 @@ function Home() {
 
   const abrirMensajes = (color) => {
     setColorActual(color);
-    setMensajes(mensajesPorColor[color]);
+    setMensajes(config[color]?.mensajes || defaultConfig[color]?.mensajes || []);
     setShowMessages(true);
   };
 
@@ -104,10 +151,7 @@ function Home() {
       progressRef.current += 100 / 30;
       const nuevoSegundo = Math.ceil(3 - (progressRef.current / 100) * 3);
       setRedCountdown(nuevoSegundo);
-
-      if (overlayRef.current) {
-        overlayRef.current.style.opacity = progressRef.current / 200;
-      }
+      if (overlayRef.current) overlayRef.current.style.opacity = progressRef.current / 200;
 
       if (progressRef.current >= 100) {
         clearInterval(redInterval.current);
@@ -115,7 +159,7 @@ function Home() {
         setRedCountdown(3);
         progressRef.current = 0;
         if (overlayRef.current) overlayRef.current.style.opacity = 0;
-        mostrarConfirmacion('🚨 Alerta de emergencia', 'rojo');
+        mostrarConfirmacion('🚨 Alerta de emergencia', 'rojo', 0);
       }
     }, 100);
   };
@@ -128,8 +172,9 @@ function Home() {
     if (overlayRef.current) overlayRef.current.style.opacity = 0;
   };
 
-  const seleccionarMensaje = (msg) => {
+  const seleccionarMensaje = (msg, idx) => {
     setSelectedMsg(msg);
+    setMensajeIndex(idx);
     setMsgProgress(0);
     let progress = 0;
     msgTimer.current = setInterval(() => {
@@ -140,7 +185,7 @@ function Home() {
         setShowMessages(false);
         setSelectedMsg(null);
         setMsgProgress(0);
-        mostrarConfirmacion(msg, colorActual);
+        mostrarConfirmacion(msg, colorActual, idx);
       }
     }, 100);
   };
@@ -152,6 +197,19 @@ function Home() {
   };
 
   const lado = espejado ? 'left' : 'right';
+
+  const contactosConfirmacion = confirmacion
+    ? (() => {
+        const { tipoAlerta, msgIdx } = confirmacion;
+        let ids = [];
+        if (tipoAlerta === 'rojo') {
+          ids = config.rojo.contactos;
+        } else {
+          ids = Object.keys(config[tipoAlerta]?.contactosPorMensaje?.[msgIdx] || {});
+        }
+        return ids.map(id => contactos.find(c => c.contacto_id === id)).filter(Boolean);
+      })()
+    : [];
 
   return (
     <div className="home-container">
@@ -217,27 +275,31 @@ function Home() {
 
       {showMessages && (
         <div className="modal-overlay" onClick={() => setShowMessages(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ position: 'relative' }}>
+            <button
+              onClick={() => { setShowMessages(false); navigate('/config-alertas'); }}
+              style={{ position: 'absolute', top: 12, right: 12, background: 'transparent', border: 'none', color: '#888', fontSize: 20, cursor: 'pointer' }}
+            >⚙️</button>
             <h2>¿Qué querés avisar?</h2>
-            {mensajes.map((msg) => (
+            {mensajes.map((msg, idx) => (
               colorActual === 'verde' ? (
                 <button
-                  key={msg}
+                  key={idx}
                   className="btn-mensaje"
                   onClick={() => {
                     setShowMessages(false);
-                    mostrarConfirmacion(msg, 'verde');
+                    mostrarConfirmacion(msg, 'verde', idx);
                   }}
                 >
                   {msg}
                 </button>
               ) : (
                 <button
-                  key={msg}
+                  key={idx}
                   className="btn-mensaje"
-                  onMouseDown={() => seleccionarMensaje(msg)}
+                  onMouseDown={() => seleccionarMensaje(msg, idx)}
                   onMouseUp={cancelarMensaje}
-                  onTouchStart={() => seleccionarMensaje(msg)}
+                  onTouchStart={() => seleccionarMensaje(msg, idx)}
                   onTouchEnd={cancelarMensaje}
                 >
                   <div
@@ -257,13 +319,13 @@ function Home() {
         <div className="confirmacion-overlay">
           <div className="confirmacion-modal">
             <p className="confirmacion-titulo">Tu alerta</p>
-            <p className="confirmacion-mensaje">{confirmacion}</p>
+            <p className="confirmacion-mensaje">{confirmacion.msg}</p>
             <p className="confirmacion-subtitulo">fue enviada a</p>
             <div className="confirmacion-contactos">
-              {contactos.length === 0 ? (
-                <p style={{ color: '#555', fontSize: 13 }}>Sin contactos aún</p>
+              {contactosConfirmacion.length === 0 ? (
+                <p style={{ color: '#555', fontSize: 13 }}>Sin contactos configurados</p>
               ) : (
-                contactos.map((c) => (
+                contactosConfirmacion.map((c) => (
                   <div key={c.id} className="confirmacion-avatar">
                     {(c.nombre || 'S').charAt(0).toUpperCase()}
                   </div>
@@ -271,10 +333,7 @@ function Home() {
               )}
             </div>
             <button className="btn-cerrar-confirmacion" onClick={cerrarConfirmacion}>
-              <div
-                className="btn-cerrar-barra"
-                style={{ width: `${cerrarProgress}%` }}
-              />
+              <div className="btn-cerrar-barra" style={{ width: `${cerrarProgress}%` }} />
               <span style={{ position: 'relative', zIndex: 1 }}>Cerrar</span>
             </button>
           </div>

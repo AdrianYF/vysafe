@@ -8,6 +8,7 @@ import Contactos from './pages/Contactos';
 import Historial from './pages/Historial';
 import Notificaciones from './pages/Notificaciones';
 import Unirse from './pages/Unirse';
+import ConfigAlertas from './pages/ConfigAlertas';
 import './App.css';
 
 function App() {
@@ -36,6 +37,7 @@ function App() {
           <Route path="/contactos" element={session ? <Contactos /> : <Navigate to="/" />} />
           <Route path="/historial" element={session ? <Historial /> : <Navigate to="/" />} />
           <Route path="/notificaciones" element={session ? <Notificaciones /> : <Navigate to="/" />} />
+          <Route path="/config-alertas" element={session ? <ConfigAlertas /> : <Navigate to="/" />} />
           <Route path="/unirse/:token" element={<Unirse />} />
         </Routes>
       </div>
