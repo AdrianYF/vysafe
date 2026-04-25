@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../supabase';
 import '../styles/Auth.css';
 
@@ -12,6 +12,12 @@ function Register() {
   const [error, setError] = useState('');
   const [mensaje, setMensaje] = useState('');
   const navigate = useNavigate();
+  const location = useLocation();
+
+  const getRedirect = () => {
+    const params = new URLSearchParams(location.search);
+    return params.get('redirect') || '/home';
+  };
 
   const handleRegister = async (e) => {
     e.preventDefault();
@@ -43,7 +49,7 @@ function Register() {
         {mensaje ? (
           <div className="auth-success">
             <p>{mensaje}</p>
-            <p className="auth-link" onClick={() => navigate('/')}>
+            <p className="auth-link" onClick={() => navigate(getRedirect())}>
               Ir al login
             </p>
           </div>
@@ -88,7 +94,7 @@ function Register() {
           </form>
         )}
 
-        <p className="auth-link" onClick={() => navigate('/')}>
+        <p className="auth-link" onClick={() => navigate(`/?redirect=${getRedirect()}`)}>
           ¿Ya tenés cuenta? Entrá
         </p>
       </div>
