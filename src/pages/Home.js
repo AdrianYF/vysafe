@@ -70,6 +70,17 @@ function Home() {
   const cargarTodo = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
 
+    // Setear External ID en OneSignal
+    if (window.OneSignalDeferred) {
+      window.OneSignalDeferred.push(async function(OneSignal) {
+        try {
+          await OneSignal.login(user.id);
+        } catch (e) {
+          console.log('OneSignal login error:', e);
+        }
+      });
+    }
+
     const { data: contactosData } = await supabase
       .from('contactos')
       .select('*')
@@ -325,7 +336,11 @@ function Home() {
               ) : (
                 contactosConfirmacion.map((c) => (
                   <div key={c.id} className="confirmacion-avatar">
-                    {(c.nombre || 'S').charAt(0).toUpperCase()}
+                    {c.avatar_url ? (
+                      <img src={c.avatar_url} alt={c.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+                    ) : (
+                      (c.nombre || 'S').charAt(0).toUpperCase()
+                    )}
                   </div>
                 ))
               )}
