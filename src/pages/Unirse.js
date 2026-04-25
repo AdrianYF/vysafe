@@ -69,39 +69,81 @@ export default function Unirse() {
 
     const user = session.user;
 
-    const { error } = await supabase.from('contactos').insert({
+    // Verificar si ya existe el contacto para evitar duplicados
+    const { data: yaExiste } = await supabase
+      .from('contactos')
+      .select('id')
+      .eq('usuario_id', invitacion.invitador_id)
+      .eq('contacto_id', user.id)
+      .maybeSingle();
+
+    if (yaExiste) {
+      setEstado('ya_aceptado');
+      return;
+    }
+
+    const nombreUsuario = user.user_metadata?.nombre || user.email;
+
+    // Insertar contacto en la cuenta del invitador
+    await supabase.from('contactos').insert({
       usuario_id: invitacion.invitador_id,
       contacto_id: user.id,
-      nombre: user.user_metadata?.nombre || user.email,
+      nombre: nombreUsuario,
       tipo: invitacion.tipo,
       alerta_verde: invitacion.alerta_verde,
       alerta_amarilla: invitacion.alerta_amarilla,
       alerta_roja: invitacion.alerta_roja,
     });
 
-    if (!error) {
-      await supabase
-        .from('invitaciones')
-        .update({ usado: true })
-        .eq('token', token);
+    // Insertar contacto en espejo en la cuenta del que acepta
+    const { data: datosInvitador } = await supabase
+      .from('contactos')
+      .select('nombre')
+      .eq('usuario_id', invitacion.invitador_id)
+      .limit(1)
+      .maybeSingle();
 
-      try {
-        const nombre = user.user_metadata?.nombre || user.email;
-        const mensaje = `✅ ${nombre} aceptó tu invitación y ahora es tu contacto en VySafe`;
-        await fetch('/api/enviar-alerta', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            mensaje,
-            contactos: [invitacion.invitador_id],
-          }),
-        });
-      } catch (e) {
-        console.error('Error enviando notificación:', e);
-      }
+    const { data: yaExisteEspejo } = await supabase
+      .from('contactos')
+      .select('id')
+      .eq('usuario_id', user.id)
+      .eq('contacto_id', invitacion.invitador_id)
+      .maybeSingle();
 
-      setEstado('aceptado');
+    if (!yaExisteEspejo) {
+      await supabase.from('contactos').insert({
+        usuario_id: user.id,
+        contacto_id: invitacion.invitador_id,
+        nombre: datosInvitador?.nombre || 'Contacto VySafe',
+        tipo: invitacion.tipo,
+        alerta_verde: invitacion.alerta_verde,
+        alerta_amarilla: invitacion.alerta_amarilla,
+        alerta_roja: invitacion.alerta_roja,
+      });
     }
+
+    // Marcar invitación como usada
+    await supabase
+      .from('invitaciones')
+      .update({ usado: true })
+      .eq('token', token);
+
+    // Notificar al invitador
+    try {
+      const mensaje = `✅ ${nombreUsuario} aceptó tu invitación y ahora es tu contacto en VySafe`;
+      await fetch('/api/enviar-alerta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mensaje,
+          contactos: [invitacion.invitador_id],
+        }),
+      });
+    } catch (e) {
+      console.error('Error enviando notificación:', e);
+    }
+
+    setEstado('aceptado');
   }
 
   const estiloContainer = {
