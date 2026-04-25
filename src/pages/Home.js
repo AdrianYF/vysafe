@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase';
 import NavBar from '../components/NavBar';
@@ -34,37 +34,13 @@ function Home() {
   const [cerrarProgress, setCerrarProgress] = useState(0);
   const [contactos, setContactos] = useState([]);
   const [config, setConfig] = useState(defaultConfig);
-  const [mensajeIndex, setMensajeIndex] = useState(null);
   const redInterval = useRef(null);
   const msgTimer = useRef(null);
   const cerrarTimer = useRef(null);
   const overlayRef = useRef(null);
   const progressRef = useRef(0);
 
-  useEffect(() => {
-    cargarTodo();
-  }, []);
-
-  async function cargarTodo() {
-    const { data: { user } } = await supabase.auth.getUser();
-
-    const { data: contactosData } = await supabase
-      .from('contactos')
-      .select('*')
-      .eq('usuario_id', user.id);
-    setContactos(contactosData || []);
-
-    const { data: configData } = await supabase
-      .from('config_alertas')
-      .select('*')
-      .eq('usuario_id', user.id);
-
-    if (configData && configData.length > 0) {
-      setConfig(armarConfig(configData));
-    }
-  }
-
-  function armarConfig(rows) {
+  const armarConfig = useCallback((rows) => {
     const cfg = {
       verde: { mensajes: [...defaultConfig.verde.mensajes], contactosPorMensaje: [{}, {}, {}] },
       amarillo: { mensajes: [...defaultConfig.amarillo.mensajes], contactosPorMensaje: [{}, {}, {}] },
@@ -89,7 +65,30 @@ function Home() {
     });
 
     return cfg;
-  }
+  }, []);
+
+  const cargarTodo = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+
+    const { data: contactosData } = await supabase
+      .from('contactos')
+      .select('*')
+      .eq('usuario_id', user.id);
+    setContactos(contactosData || []);
+
+    const { data: configData } = await supabase
+      .from('config_alertas')
+      .select('*')
+      .eq('usuario_id', user.id);
+
+    if (configData && configData.length > 0) {
+      setConfig(armarConfig(configData));
+    }
+  }, [armarConfig]);
+
+  useEffect(() => {
+    cargarTodo();
+  }, [cargarTodo]);
 
   async function enviarAlerta(mensaje, tipoAlerta, msgIdx) {
     try {
@@ -174,7 +173,6 @@ function Home() {
 
   const seleccionarMensaje = (msg, idx) => {
     setSelectedMsg(msg);
-    setMensajeIndex(idx);
     setMsgProgress(0);
     let progress = 0;
     msgTimer.current = setInterval(() => {

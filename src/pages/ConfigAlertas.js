@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase';
 import NavBar from '../components/NavBar';
@@ -14,16 +14,12 @@ export default function ConfigAlertas() {
   const [config, setConfig] = useState(null);
   const [seccionAbierta, setSeccionAbierta] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [editando, setEditando] = useState(null); // { color, index }
+  const [editando, setEditando] = useState(null);
   const [textoEdit, setTextoEdit] = useState('');
   const [deleteProgress, setDeleteProgress] = useState({});
   const deleteTimers = useRef({});
 
-  useEffect(() => {
-    cargarDatos();
-  }, []);
-
-  async function cargarDatos() {
+  const cargarDatos = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
 
     const { data: contactosData } = await supabase
@@ -39,7 +35,11 @@ export default function ConfigAlertas() {
 
     setConfig(armarConfig(configData || []));
     setLoading(false);
-  }
+  }, []);
+
+  useEffect(() => {
+    cargarDatos();
+  }, [cargarDatos]);
 
   function armarConfig(rows) {
     const cfg = {
@@ -205,13 +205,11 @@ export default function ConfigAlertas() {
   return (
     <div style={{ minHeight: '100vh', background: '#0d0d0d', fontFamily: 'sans-serif', color: '#fff', paddingBottom: 100 }}>
 
-      {/* Header */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '20px 20px 10px', borderBottom: '1px solid #1a1a1a' }}>
         <button onClick={() => navigate('/home')} style={{ background: 'transparent', border: 'none', color: '#888', fontSize: 22, cursor: 'pointer' }}>←</button>
         <span style={{ fontSize: 18, fontWeight: 600 }}>Configuración de alertas</span>
       </div>
 
-      {/* Modal editar mensaje */}
       {editando && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
           onClick={() => setEditando(null)}>
@@ -270,7 +268,6 @@ export default function ConfigAlertas() {
         </div>
       )}
 
-      {/* Secciones */}
       {colores.map(({ key, label, emoji, bg }) => (
         <div key={key} style={{ margin: '12px 16px', borderRadius: 16, overflow: 'hidden', border: '1px solid #1a1a1a' }}>
 
@@ -320,16 +317,13 @@ export default function ConfigAlertas() {
                     const progress = deleteProgress[deleteKey] || 0;
                     return (
                       <div key={i} style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', background: '#1a1a1a', border: '1px solid #2a2a2a' }}>
-                        {/* Barra de delete */}
                         <div style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: `${progress}%`, background: '#e74c3c', opacity: 0.3, transition: 'width 0.1s linear', pointerEvents: 'none' }} />
                         <div style={{ position: 'relative', display: 'flex', alignItems: 'center', padding: '12px 14px', gap: 10 }}>
                           <span style={{ flex: 1, fontSize: 14, color: '#ccc' }}>{msg}</span>
-                          {/* Lápiz */}
                           <button
                             onClick={() => { setEditando({ color: key, index: i }); setTextoEdit(msg); }}
                             style={{ background: 'transparent', border: 'none', color: '#888', fontSize: 18, cursor: 'pointer', padding: '4px 6px' }}
                           >✏️</button>
-                          {/* Tacho */}
                           <button
                             onMouseDown={() => iniciarDelete(key, i)}
                             onMouseUp={() => cancelarDelete(key, i)}
@@ -344,7 +338,6 @@ export default function ConfigAlertas() {
                     );
                   })}
 
-                  {/* Botón agregar mensaje */}
                   <button
                     onClick={() => {
                       const nueva = JSON.parse(JSON.stringify(config));
