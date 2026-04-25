@@ -42,13 +42,16 @@ export default function Unirse() {
 
     setInvitacion(data);
 
-    // Buscar nombre del invitador desde sus metadatos
-    const { data: invitadorData } = await supabase
-      .rpc('get_user_name', { user_id: data.invitador_id })
+    // Buscar nombre del invitador desde sus contactos
+    const { data: perfilData } = await supabase
+      .from('contactos')
+      .select('nombre')
+      .eq('usuario_id', data.invitador_id)
+      .limit(1)
       .maybeSingle();
 
-    if (invitadorData) {
-      setNombreInvitador(invitadorData);
+    if (perfilData?.nombre) {
+      setNombreInvitador(perfilData.nombre);
     }
 
     setEstado('valido');
@@ -71,7 +74,7 @@ export default function Unirse() {
 
     const user = session.user;
 
-    // Verificar si ya existe para evitar duplicados
+    // Verificar duplicados
     const { data: yaExiste } = await supabase
       .from('contactos')
       .select('id')
@@ -86,20 +89,27 @@ export default function Unirse() {
     }
 
     const nombreUsuario = user.user_metadata?.full_name || user.user_metadata?.nombre || user.email;
+    const avatarUsuario = user.user_metadata?.avatar_url || user.user_metadata?.picture || null;
 
     // Insertar en la cuenta del invitador
     await supabase.from('contactos').insert({
       usuario_id: invitacion.invitador_id,
       contacto_id: user.id,
       nombre: nombreUsuario,
+      avatar_url: avatarUsuario,
       tipo: invitacion.tipo,
       alerta_verde: invitacion.alerta_verde,
       alerta_amarilla: invitacion.alerta_amarilla,
       alerta_roja: invitacion.alerta_roja,
     });
 
-    // Buscar nombre del invitador
-    const nombreInvitadorReal = nombreInvitador || 'Contacto VySafe';
+    // Buscar avatar del invitador
+    const { data: datosInvitador } = await supabase
+      .from('contactos')
+      .select('nombre, avatar_url')
+      .eq('contacto_id', invitacion.invitador_id)
+      .limit(1)
+      .maybeSingle();
 
     // Insertar espejo en la cuenta del que acepta
     const { data: yaExisteEspejo } = await supabase
@@ -113,7 +123,8 @@ export default function Unirse() {
       await supabase.from('contactos').insert({
         usuario_id: user.id,
         contacto_id: invitacion.invitador_id,
-        nombre: nombreInvitadorReal,
+        nombre: nombreInvitador || datosInvitador?.nombre || 'Contacto VySafe',
+        avatar_url: datosInvitador?.avatar_url || null,
         tipo: invitacion.tipo,
         alerta_verde: invitacion.alerta_verde,
         alerta_amarilla: invitacion.alerta_amarilla,
@@ -164,13 +175,14 @@ export default function Unirse() {
     padding: '14px 32px',
     borderRadius: '14px',
     border: 'none',
-    background: procesando ? '#555' : '#2ecc71',
+    background: '#2ecc71',
     color: '#fff',
     fontSize: '16px',
     fontWeight: '600',
     cursor: procesando ? 'not-allowed' : 'pointer',
     marginTop: '8px',
     width: '100%',
+    opacity: procesando ? 0.6 : 1,
   };
 
   const estiloBtnSecundario = {
@@ -186,16 +198,14 @@ export default function Unirse() {
   };
 
   if (estado === 'cargando') return (
-    <div style={estiloContainer}>
-      <p>Verificando invitación...</p>
-    </div>
+    <div style={estiloContainer}><p>Verificando invitación...</p></div>
   );
 
   if (estado === 'usado') return (
     <div style={estiloContainer}>
       <span style={{ fontSize: 48 }}>🔒</span>
       <p>Este link ya fue usado.</p>
-      <button style={{ ...estiloBtn, background: '#2ecc71', cursor: 'pointer' }} onClick={() => navigate('/')}>Ir a VySafe</button>
+      <button style={estiloBtn} onClick={() => navigate('/')}>Ir a VySafe</button>
     </div>
   );
 
@@ -204,7 +214,7 @@ export default function Unirse() {
       <span style={{ fontSize: 48 }}>✅</span>
       <p style={{ fontSize: 20, fontWeight: 700 }}>¡Ya sos contacto!</p>
       <p style={{ color: '#888' }}>Esta invitación ya fue aceptada.</p>
-      <button style={{ ...estiloBtn, background: '#2ecc71', cursor: 'pointer' }} onClick={() => navigate('/home')}>Ir a VySafe</button>
+      <button style={estiloBtn} onClick={() => navigate('/home')}>Ir a VySafe</button>
     </div>
   );
 
@@ -212,7 +222,7 @@ export default function Unirse() {
     <div style={estiloContainer}>
       <span style={{ fontSize: 48 }}>⏰</span>
       <p>Este link expiró.</p>
-      <button style={{ ...estiloBtn, background: '#2ecc71', cursor: 'pointer' }} onClick={() => navigate('/')}>Ir a VySafe</button>
+      <button style={estiloBtn} onClick={() => navigate('/')}>Ir a VySafe</button>
     </div>
   );
 
@@ -220,7 +230,7 @@ export default function Unirse() {
     <div style={estiloContainer}>
       <span style={{ fontSize: 48 }}>❌</span>
       <p>Link inválido.</p>
-      <button style={{ ...estiloBtn, background: '#2ecc71', cursor: 'pointer' }} onClick={() => navigate('/')}>Ir a VySafe</button>
+      <button style={estiloBtn} onClick={() => navigate('/')}>Ir a VySafe</button>
     </div>
   );
 
@@ -229,7 +239,7 @@ export default function Unirse() {
       <span style={{ fontSize: 48 }}>🎉</span>
       <p style={{ fontSize: 20, fontWeight: 700 }}>¡Te uniste!</p>
       <p style={{ color: '#888' }}>Ya sos parte de la red VySafe de tu contacto.</p>
-      <button style={{ ...estiloBtn, background: '#2ecc71', cursor: 'pointer' }} onClick={() => navigate('/home')}>Abrir VySafe</button>
+      <button style={estiloBtn} onClick={() => navigate('/home')}>Abrir VySafe</button>
     </div>
   );
 
