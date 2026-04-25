@@ -1,17 +1,13 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { supabase } from '../supabase';
 
 export default function Unirse() {
   const { token } = useParams();
   const navigate = useNavigate();
-  const [estado, setEstado] = useState('cargando'); // cargando | valido | usado | expirado | error
+  const [estado, setEstado] = useState('cargando');
 
-  useEffect(() => {
-    verificarToken();
-  }, []);
-
-  async function verificarToken() {
+  const verificarToken = useCallback(async () => {
     const { data, error } = await supabase
       .from('invitaciones')
       .select('*')
@@ -34,7 +30,11 @@ export default function Unirse() {
     }
 
     setEstado('valido');
-  }
+  }, [token]);
+
+  useEffect(() => {
+    verificarToken();
+  }, [verificarToken]);
 
   async function aceptarInvitacion() {
     const { data: { user } } = await supabase.auth.getUser();
