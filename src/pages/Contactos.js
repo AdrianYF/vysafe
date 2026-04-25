@@ -41,7 +41,6 @@ export default function Contactos({ soloInvitar = false, onCerrar = null }) {
     setGenerandoLink(true);
     const { data: { user } } = await supabase.auth.getUser();
 
-    // Buscar si ya tiene un token permanente
     const { data: perfil } = await supabase
       .from('perfiles')
       .select('invite_token')
@@ -49,14 +48,11 @@ export default function Contactos({ soloInvitar = false, onCerrar = null }) {
       .maybeSingle();
 
     if (perfil?.invite_token) {
-      const link = `${window.location.origin}/unirse/${perfil.invite_token}`;
-      setLinkGenerado(link);
+      setLinkGenerado(`${window.location.origin}/unirse/${perfil.invite_token}`);
     } else {
-      // Generar token nuevo y guardarlo
       const token = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
       await supabase.from('perfiles').upsert({ id: user.id, invite_token: token });
-      const link = `${window.location.origin}/unirse/${token}`;
-      setLinkGenerado(link);
+      setLinkGenerado(`${window.location.origin}/unirse/${token}`);
     }
     setGenerandoLink(false);
   }
@@ -152,7 +148,6 @@ export default function Contactos({ soloInvitar = false, onCerrar = null }) {
           {contactos.map(c => (
             <li key={c.id} className="contacto-item" style={{ flexDirection: 'column', alignItems: 'flex-start', gap: 8 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%' }}>
-                {/* Avatar */}
                 <div style={{ width: 44, height: 44, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: '#333', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, fontWeight: 700, color: '#fff' }}>
                   {c.avatar_url ? (
                     <img src={c.avatar_url} alt={c.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -160,12 +155,10 @@ export default function Contactos({ soloInvitar = false, onCerrar = null }) {
                     (c.nombre || 'S').charAt(0).toUpperCase()
                   )}
                 </div>
-
                 <div style={{ flex: 1 }}>
                   <p style={{ margin: 0, fontSize: 15, color: '#fff', fontWeight: 600 }}>{c.nombre || 'Sin nombre'}</p>
+                  {c.email && <p style={{ margin: 0, fontSize: 12, color: '#666', marginTop: 2 }}>{c.email}</p>}
                 </div>
-
-                {/* Botones */}
                 <div style={{ display: 'flex', gap: 8 }}>
                   <button
                     onClick={() => { setEditando(c.id); setApodo(c.nombre || ''); }}
@@ -198,6 +191,7 @@ export default function Contactos({ soloInvitar = false, onCerrar = null }) {
                 </div>
                 <div>
                   <p style={{ margin: 0, fontSize: 16, color: '#fff', fontWeight: 600 }}>{c?.nombre}</p>
+                  {c?.email && <p style={{ margin: 0, fontSize: 12, color: '#666', marginTop: 2 }}>{c.email}</p>}
                 </div>
               </div>
 

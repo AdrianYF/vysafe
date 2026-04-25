@@ -16,7 +16,6 @@ export default function Unirse() {
     const { data: { session } } = await supabase.auth.getSession();
     setSessionActiva(session);
 
-    // Primero buscar en perfiles (link permanente)
     const { data: perfil } = await supabase
       .from('perfiles')
       .select('id, invite_token')
@@ -27,7 +26,6 @@ export default function Unirse() {
       setInvitador({ invitador_id: perfil.id });
       setEsPermanente(true);
 
-      // Buscar nombre del invitador
       const { data: contactoData } = await supabase
         .from('contactos')
         .select('nombre, avatar_url')
@@ -40,7 +38,6 @@ export default function Unirse() {
       return;
     }
 
-    // Si no es permanente, buscar en invitaciones
     const { data, error } = await supabase
       .from('invitaciones')
       .select('*')
@@ -82,16 +79,14 @@ export default function Unirse() {
     }
 
     const user = session.user;
-    const invitadorId = invitador.invitador_id || invitador.invitador_id;
+    const invitadorId = invitador.invitador_id;
 
-    // Evitar que alguien se agregue a sí mismo
     if (user.id === invitadorId) {
       setProcesando(false);
       navigate('/home');
       return;
     }
 
-    // Verificar duplicados
     const { data: yaExiste } = await supabase
       .from('contactos')
       .select('id')
@@ -107,6 +102,7 @@ export default function Unirse() {
 
     const nombreUsuario = user.user_metadata?.full_name || user.user_metadata?.nombre || user.email;
     const avatarUsuario = user.user_metadata?.avatar_url || user.user_metadata?.picture || null;
+    const emailUsuario = user.email;
 
     // Insertar en la cuenta del invitador
     await supabase.from('contactos').insert({
@@ -114,6 +110,7 @@ export default function Unirse() {
       contacto_id: user.id,
       nombre: nombreUsuario,
       avatar_url: avatarUsuario,
+      email: emailUsuario,
       tipo: 'alerta',
       alerta_verde: true,
       alerta_amarilla: true,
@@ -134,6 +131,7 @@ export default function Unirse() {
         contacto_id: invitadorId,
         nombre: nombreInvitador || 'Contacto VySafe',
         avatar_url: null,
+        email: null,
         tipo: 'alerta',
         alerta_verde: true,
         alerta_amarilla: true,
@@ -141,7 +139,6 @@ export default function Unirse() {
       });
     }
 
-    // Solo marcar como usado si NO es permanente
     if (!esPermanente) {
       await supabase
         .from('invitaciones')
@@ -149,7 +146,6 @@ export default function Unirse() {
         .eq('token', token);
     }
 
-    // Notificar al invitador
     try {
       const mensaje = `✅ ${nombreUsuario} aceptó tu invitación y ahora es tu contacto en VySafe`;
       await fetch('/api/enviar-alerta', {
