@@ -41,7 +41,6 @@ export default function Unirse() {
 
     setInvitacion(data);
 
-    // Buscar nombre del invitador en metadata
     const { data: perfilData } = await supabase
       .from('contactos')
       .select('nombre')
@@ -188,7 +187,7 @@ export default function Unirse() {
       <span style={{ fontSize: 48 }}>🎉</span>
       <p style={{ fontSize: 20, fontWeight: 700 }}>¡Te uniste!</p>
       <p style={{ color: '#888' }}>Ya sos parte de la red VySafe de tu contacto.</p>
-      <button style={estiloBtn} onClick={() => navigate('/home')}>Ir a VySafe</button>
+      <button style={estiloBtn} onClick={() => navigate('/')}>Abrir VySafe</button>
     </div>
   );
 
@@ -204,7 +203,7 @@ export default function Unirse() {
         <p style={{ color: '#888' }}>Alguien quiere mantenerte informado sobre su seguridad.</p>
       )}
       <button style={estiloBtn} onClick={aceptarInvitacion}>
-        {sessionActiva ? 'Aceptar invitación' : 'Aceptar invitación'}
+        Aceptar invitación
       </button>
       {!sessionActiva && (
         <button style={estiloBtnSecundario} onClick={() => navigate(`/register?redirect=/unirse/${token}`)}>
