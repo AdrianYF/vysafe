@@ -25,7 +25,39 @@ export default function Contactos({ soloInvitar = false, onCerrar = null }) {
   }, []);
 
   useEffect(() => {
-    if (!soloInvitar) cargarContactos();
+    if (soloInvitar) return;
+    cargarContactos();
+
+    // Realtime — escuchar nuevos contactos
+    const setupRealtime = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+
+      const channel = supabase
+        .channel('contactos-changes')
+        .on('postgres_changes', {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'contactos',
+          filter: `usuario_id=eq.${user.id}`,
+        }, (payload) => {
+          setContactos(prev => {
+            const yaExiste = prev.find(c => c.id === payload.new.id);
+            if (yaExiste) return prev;
+            mostrarToast(`🎉 ¡${payload.new.nombre || 'Alguien'} ya es tu contacto! Asignalo a un mensaje.`);
+            return [...prev, payload.new];
+          });
+        })
+        .subscribe();
+
+      return channel;
+    };
+
+    let channel;
+    setupRealtime().then(ch => { channel = ch; });
+
+    return () => {
+      if (channel) supabase.removeChannel(channel);
+    };
   }, [soloInvitar, cargarContactos]);
 
   useEffect(() => {
@@ -34,7 +66,7 @@ export default function Contactos({ soloInvitar = false, onCerrar = null }) {
 
   function mostrarToast(msg) {
     setToast(msg);
-    setTimeout(() => setToast(null), 3000);
+    setTimeout(() => setToast(null), 5000);
   }
 
   async function obtenerOGenerarLink() {
@@ -175,7 +207,6 @@ export default function Contactos({ soloInvitar = false, onCerrar = null }) {
         </ul>
       )}
 
-      {/* Modal editar contacto */}
       {editando && (() => {
         const c = contactos.find(x => x.id === editando);
         return (
@@ -221,7 +252,6 @@ export default function Contactos({ soloInvitar = false, onCerrar = null }) {
         );
       })()}
 
-      {/* Modal confirmar eliminación */}
       {eliminando && (
         <div className="modal-overlay" onClick={() => setEliminando(null)}>
           <div className="modal" onClick={e => e.stopPropagation()}>
