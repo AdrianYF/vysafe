@@ -23,6 +23,27 @@ export default function Unirse() {
       .maybeSingle();
 
     if (perfil) {
+      // Si ya está logueado, verificar si ya es contacto
+      if (session) {
+        const { data: yaExiste } = await supabase
+          .from('contactos')
+          .select('id')
+          .eq('usuario_id', perfil.id)
+          .eq('contacto_id', session.user.id)
+          .maybeSingle();
+
+        if (yaExiste) {
+          setEstado('ya_aceptado');
+          return;
+        }
+
+        // Evitar que alguien se agregue a sí mismo
+        if (session.user.id === perfil.id) {
+          navigate('/home');
+          return;
+        }
+      }
+
       setInvitador({ invitador_id: perfil.id });
       setEsPermanente(true);
 
@@ -61,7 +82,7 @@ export default function Unirse() {
 
     setInvitador(data);
     setEstado('valido');
-  }, [token]);
+  }, [token, navigate]);
 
   useEffect(() => {
     verificarToken();
@@ -87,6 +108,7 @@ export default function Unirse() {
       return;
     }
 
+    // Verificar duplicados
     const { data: yaExiste } = await supabase
       .from('contactos')
       .select('id')
@@ -104,7 +126,6 @@ export default function Unirse() {
     const avatarUsuario = user.user_metadata?.avatar_url || user.user_metadata?.picture || null;
     const emailUsuario = user.email;
 
-    // Insertar en la cuenta del invitador
     await supabase.from('contactos').insert({
       usuario_id: invitadorId,
       contacto_id: user.id,
@@ -117,7 +138,6 @@ export default function Unirse() {
       alerta_roja: true,
     });
 
-    // Insertar espejo
     const { data: yaExisteEspejo } = await supabase
       .from('contactos')
       .select('id')
@@ -147,11 +167,11 @@ export default function Unirse() {
     }
 
     try {
-      const mensaje = `✅ ${nombreUsuario} aceptó tu invitación y ahora es tu contacto en VySafe`;
+      const nombreMsg = `✅ ${nombreUsuario} aceptó tu invitación. ¡Asignalo a un mensaje en VySafe!`;
       await fetch('/api/enviar-alerta', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mensaje, contactos: [invitadorId] }),
+        body: JSON.stringify({ mensaje: nombreMsg, contactos: [invitadorId] }),
       });
     } catch (e) {
       console.error('Error enviando notificación:', e);
