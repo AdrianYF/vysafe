@@ -6,6 +6,7 @@ export default function Unirse() {
   const { token } = useParams();
   const navigate = useNavigate();
   const [estado, setEstado] = useState('cargando');
+  const [invitacion, setInvitacion] = useState(null);
 
   const verificarToken = useCallback(async () => {
     const { data, error } = await supabase
@@ -29,6 +30,7 @@ export default function Unirse() {
       return;
     }
 
+    setInvitacion(data);
     setEstado('valido');
   }, [token]);
 
@@ -43,12 +45,6 @@ export default function Unirse() {
       navigate(`/login?redirect=/unirse/${token}`);
       return;
     }
-
-    const { data: invitacion } = await supabase
-      .from('invitaciones')
-      .select('*')
-      .eq('token', token)
-      .single();
 
     const { error } = await supabase.from('contactos').insert({
       usuario_id: invitacion.invitador_id,
@@ -65,6 +61,21 @@ export default function Unirse() {
         .from('invitaciones')
         .update({ usado: true })
         .eq('token', token);
+
+      // Notificar al que invitó
+      try {
+        const mensaje = `✅ ${user.email} aceptó tu invitación y ahora es tu contacto en VySafe`;
+        await fetch('/api/enviar-alerta', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            mensaje,
+            contactos: [invitacion.invitador_id],
+          }),
+        });
+      } catch (e) {
+        console.error('Error enviando notificación:', e);
+      }
 
       setEstado('aceptado');
     }
