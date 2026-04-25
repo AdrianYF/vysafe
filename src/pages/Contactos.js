@@ -285,8 +285,7 @@ export default function Contactos({ soloInvitar = false, onCerrar = null }) {
       {/* Modal editar contacto */}
       {editando && (
         <div className="modal-overlay" onClick={() => setEditando(null)}>
-          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxHeight: '80vh', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+<div className="modal" onClick={e => e.stopPropagation()} style={{ maxHeight: '75vh', overflowY: 'auto', paddingBottom: 80 }}>            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
               <div style={{ width: 52, height: 52, borderRadius: '50%', overflow: 'hidden', background: '#333', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
                 {editando.avatar_url ? <img src={editando.avatar_url} alt={editando.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (editando.nombre || 'S').charAt(0).toUpperCase()}
               </div>
