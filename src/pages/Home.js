@@ -40,10 +40,34 @@ function Home() {
       .from('contactos')
       .select('*')
       .eq('usuario_id', user.id);
-    if (!error) setContactos(data);
+    if (!error) setContactos(data || []);
   }
 
-  const mostrarConfirmacion = (msg) => {
+  async function enviarAlerta(mensaje, tipoAlerta) {
+    try {
+      const contactosDestino = contactos
+        .filter(c => {
+          if (tipoAlerta === 'verde') return c.alerta_verde;
+          if (tipoAlerta === 'amarillo') return c.alerta_amarilla;
+          if (tipoAlerta === 'rojo') return c.alerta_roja;
+          return true;
+        })
+        .map(c => c.contacto_id);
+
+      if (contactosDestino.length === 0) return;
+
+      await fetch('/api/enviar-alerta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mensaje, contactos: contactosDestino }),
+      });
+    } catch (e) {
+      console.error('Error enviando alerta:', e);
+    }
+  }
+
+  const mostrarConfirmacion = (msg, tipoAlerta) => {
+    enviarAlerta(msg, tipoAlerta);
     setConfirmacion(msg);
     setCerrarProgress(0);
     let progress = 0;
@@ -91,7 +115,7 @@ function Home() {
         setRedCountdown(3);
         progressRef.current = 0;
         if (overlayRef.current) overlayRef.current.style.opacity = 0;
-        mostrarConfirmacion('🚨 Alerta de emergencia');
+        mostrarConfirmacion('🚨 Alerta de emergencia', 'rojo');
       }
     }, 100);
   };
@@ -116,7 +140,7 @@ function Home() {
         setShowMessages(false);
         setSelectedMsg(null);
         setMsgProgress(0);
-        mostrarConfirmacion(msg);
+        mostrarConfirmacion(msg, colorActual);
       }
     }, 100);
   };
@@ -202,7 +226,7 @@ function Home() {
                   className="btn-mensaje"
                   onClick={() => {
                     setShowMessages(false);
-                    mostrarConfirmacion(msg);
+                    mostrarConfirmacion(msg, 'verde');
                   }}
                 >
                   {msg}
