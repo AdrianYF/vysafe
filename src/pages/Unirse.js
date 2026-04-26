@@ -20,7 +20,7 @@ export default function Unirse() {
 
     const { data: perfil } = await supabase
       .from('perfiles')
-      .select('id, invite_token')
+      .select('id, invite_token, nombre, avatar_url, email')
       .eq('invite_token', token)
       .maybeSingle();
 
@@ -46,32 +46,9 @@ export default function Unirse() {
 
       setInvitador({ invitador_id: perfil.id });
       setEsPermanente(true);
-
-      const { data: contactoData } = await supabase
-        .from('contactos')
-        .select('nombre, avatar_url, email')
-        .eq('usuario_id', perfil.id)
-        .not('avatar_url', 'is', null)
-        .limit(1)
-        .maybeSingle();
-
-      if (contactoData?.nombre) setNombreInvitador(contactoData.nombre);
-      if (contactoData?.avatar_url) setAvatarInvitador(contactoData.avatar_url);
-      if (contactoData?.email) setEmailInvitador(contactoData.email);
-
-      // Si no encontró con avatar, buscar cualquier fila
-      if (!contactoData) {
-        const { data: contactoData2 } = await supabase
-          .from('contactos')
-          .select('nombre, avatar_url, email')
-          .eq('usuario_id', perfil.id)
-          .limit(1)
-          .maybeSingle();
-
-        if (contactoData2?.nombre) setNombreInvitador(contactoData2.nombre);
-        if (contactoData2?.avatar_url) setAvatarInvitador(contactoData2.avatar_url);
-        if (contactoData2?.email) setEmailInvitador(contactoData2.email);
-      }
+      if (perfil.nombre) setNombreInvitador(perfil.nombre);
+      if (perfil.avatar_url) setAvatarInvitador(perfil.avatar_url);
+      if (perfil.email) setEmailInvitador(perfil.email);
 
       setEstado('valido');
       return;
