@@ -28,7 +28,6 @@ export default function Notificaciones() {
 
     setHistorial(notifs || []);
 
-    // Marcar todas como leídas
     await supabase
       .from('notificaciones')
       .update({ leida: true })
@@ -65,16 +64,19 @@ export default function Notificaciones() {
 
       if (estado === 'aceptado') {
         const { data: { user } } = await supabase.auth.getUser();
+
         const { data: existente } = await supabase
           .from('config_alertas')
           .select('*')
           .eq('usuario_id', invitacion.invitador_id)
           .eq('color', invitacion.color)
           .eq('mensaje_index', invitacion.mensaje_index)
-          .single();
+          .maybeSingle();
 
         if (existente) {
-          const contactosActuales = existente.contactos ? existente.contactos.split(',').filter(Boolean) : [];
+          const contactosActuales = existente.contactos
+            ? existente.contactos.split(',').filter(Boolean)
+            : [];
           if (!contactosActuales.includes(user.id)) {
             contactosActuales.push(user.id);
             await supabase
@@ -82,6 +84,15 @@ export default function Notificaciones() {
               .update({ contactos: contactosActuales.join(',') })
               .eq('id', existente.id);
           }
+        } else {
+          // No existe la fila, crearla
+          await supabase.from('config_alertas').insert({
+            usuario_id: invitacion.invitador_id,
+            color: invitacion.color,
+            mensaje_index: invitacion.mensaje_index,
+            mensaje_texto: invitacion.mensaje_texto,
+            contactos: user.id,
+          });
         }
       }
     }
