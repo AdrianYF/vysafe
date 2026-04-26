@@ -3,7 +3,7 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { mensaje, contactos, color, url } = req.body;
+  const { mensaje, contactos, color, url, tipo } = req.body;
 
   if (!contactos || contactos.length === 0) {
     return res.status(200).json({ ok: true, mensaje: 'Sin contactos' });
@@ -39,5 +39,33 @@ export default async function handler(req, res) {
   });
 
   const data = await response.json();
+
+  // Guardar notificación en Supabase para cada destinatario
+  try {
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    const rows = contactos.map(usuarioId => ({
+      usuario_id: usuarioId,
+      mensaje,
+      color: color || 'verde',
+      tipo: tipo || 'alerta',
+      leida: false,
+    }));
+
+    await fetch(`${supabaseUrl}/rest/v1/notificaciones`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': supabaseKey,
+        'Authorization': `Bearer ${supabaseKey}`,
+        'Prefer': 'return=minimal',
+      },
+      body: JSON.stringify(rows),
+    });
+  } catch (e) {
+    console.error('Error guardando notificación:', e);
+  }
+
   return res.status(200).json(data);
 }
