@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { supabase } from '../supabase';
 import NavBar from '../components/NavBar';
 import Contactos from './Contactos';
@@ -20,6 +20,7 @@ const defaultConfig = {
 
 function Home() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [showMessages, setShowMessages] = useState(false);
   const [mensajes, setMensajes] = useState([]);
   const [colorActual, setColorActual] = useState(null);
@@ -98,7 +99,7 @@ function Home() {
 
   useEffect(() => {
     cargarTodo();
-  }, [cargarTodo]);
+  }, [cargarTodo, location]);
 
   async function enviarAlerta(mensaje, tipoAlerta, msgIdx) {
     try {

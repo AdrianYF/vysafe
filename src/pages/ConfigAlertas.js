@@ -8,6 +8,15 @@ const defaultMensajes = {
   amarillo: ['Saliendo de casa', 'Subiendo al colectivo', 'Caminando, todo bien'],
 };
 
+function getInstrucciones(label) {
+  return [
+    '1. Abrí Configuración en tu teléfono',
+    '2. Entrá en Notificaciones → VySafe',
+    '3. Tocá "Sonido"',
+    `4. Elegí el archivo VySafe-${label}.wav`,
+  ];
+}
+
 export default function ConfigAlertas() {
   const navigate = useNavigate();
   const [contactos, setContactos] = useState([]);
@@ -17,6 +26,8 @@ export default function ConfigAlertas() {
   const [editando, setEditando] = useState(null);
   const [textoEdit, setTextoEdit] = useState('');
   const [deleteProgress, setDeleteProgress] = useState({});
+  const [mostrarInstrucciones, setMostrarInstrucciones] = useState(null);
+  const [bloqueandoAgregar, setBloqueandoAgregar] = useState({});
   const deleteTimers = useRef({});
 
   const cargarDatos = useCallback(async () => {
@@ -188,6 +199,18 @@ export default function ConfigAlertas() {
     }
 
     setConfig(nueva);
+    setBloqueandoAgregar(prev => ({ ...prev, [color]: true }));
+    setTimeout(() => {
+      setBloqueandoAgregar(prev => ({ ...prev, [color]: false }));
+    }, 800);
+  }
+
+  function descargarRingtone(key, label) {
+    const a = document.createElement('a');
+    a.href = `/alerta-${key}.wav`;
+    a.download = `VySafe-${label}.wav`;
+    a.click();
+    setMostrarInstrucciones(label);
   }
 
   const colores = [
@@ -209,6 +232,26 @@ export default function ConfigAlertas() {
         <button onClick={() => navigate('/home')} style={{ background: 'transparent', border: 'none', color: '#888', fontSize: 22, cursor: 'pointer' }}>←</button>
         <span style={{ fontSize: 18, fontWeight: 600 }}>Configuración de alertas</span>
       </div>
+
+      {mostrarInstrucciones && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+          onClick={() => setMostrarInstrucciones(null)}>
+          <div style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 20, padding: 24, width: '100%', maxWidth: 360 }}
+            onClick={e => e.stopPropagation()}>
+            <h3 style={{ margin: '0 0 8px', fontSize: 17 }}>✅ Ringtone descargado</h3>
+            <p style={{ color: '#888', fontSize: 13, marginBottom: 16 }}>Seguí estos pasos para asignarlo en tu teléfono:</p>
+            {getInstrucciones(mostrarInstrucciones).map((paso, i) => (
+              <p key={i} style={{ fontSize: 14, color: '#ccc', margin: '6px 0' }}>{paso}</p>
+            ))}
+            <button
+              onClick={() => setMostrarInstrucciones(null)}
+              style={{ marginTop: 20, width: '100%', padding: 12, borderRadius: 12, border: 'none', background: '#2ecc71', color: '#fff', fontSize: 15, fontWeight: 600, cursor: 'pointer' }}
+            >
+              Entendido
+            </button>
+          </div>
+        </div>
+      )}
 
       {editando && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
@@ -282,6 +325,13 @@ export default function ConfigAlertas() {
           {seccionAbierta === key && (
             <div style={{ background: '#111', padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
 
+              <button
+                onClick={() => descargarRingtone(key, label)}
+                style={{ padding: '10px 14px', borderRadius: 12, border: `1px solid ${bg}`, background: 'transparent', color: bg, fontSize: 14, fontWeight: 600, cursor: 'pointer', textAlign: 'center' }}
+              >
+                🔔 Descargar ringtone {label}
+              </button>
+
               {key === 'rojo' ? (
                 <>
                   <p style={{ fontSize: 12, color: '#888', textTransform: 'uppercase', letterSpacing: 1 }}>
@@ -340,12 +390,13 @@ export default function ConfigAlertas() {
 
                   <button
                     onClick={() => {
+                      if (bloqueandoAgregar[key]) return;
                       const nueva = JSON.parse(JSON.stringify(config));
                       nueva[key].mensajes.push('Nuevo mensaje');
                       nueva[key].contactosPorMensaje.push({});
                       setConfig(nueva);
                     }}
-                    style={{ padding: '10px', borderRadius: 10, border: '1px dashed #333', background: 'transparent', color: '#888', fontSize: 14, cursor: 'pointer', textAlign: 'center' }}
+                    style={{ padding: '10px', borderRadius: 10, border: '1px dashed #333', background: 'transparent', color: bloqueandoAgregar[key] ? '#333' : '#888', fontSize: 14, cursor: bloqueandoAgregar[key] ? 'default' : 'pointer', textAlign: 'center' }}
                   >
                     + Agregar mensaje
                   </button>
