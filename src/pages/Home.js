@@ -95,6 +95,15 @@ function Home() {
   const cargarTodo = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
 
+    // Actualizar perfil con datos actuales
+    const nombre = user.user_metadata?.full_name || user.user_metadata?.nombre || user.email;
+    const avatar_url = user.user_metadata?.avatar_url || user.user_metadata?.picture || null;
+    const email = user.email;
+
+    await supabase.from('perfiles')
+      .update({ nombre, avatar_url, email })
+      .eq('id', user.id);
+
     if (window.OneSignalDeferred) {
       window.OneSignalDeferred.push(async function(OneSignal) {
         try {
