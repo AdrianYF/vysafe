@@ -29,6 +29,7 @@ export default function ConfigAlertas() {
   const [mostrarInstrucciones, setMostrarInstrucciones] = useState(null);
   const [bloqueandoAgregar, setBloqueandoAgregar] = useState({});
   const [invitacionesPendientes, setInvitacionesPendientes] = useState([]);
+  const [nuevasInvitaciones, setNuevasInvitaciones] = useState([]);
   const [toast, setToast] = useState(null);
   const deleteTimers = useRef({});
 
@@ -137,105 +138,111 @@ export default function ConfigAlertas() {
       contactos: Object.keys(nueva[color].contactosPorMensaje[index] || {}).join(','),
     });
 
-    setEditando(null);
-  }
-
-  async function toggleContacto(color, mensajeIndex, contactoId) {
-    const { data: { user } } = await supabase.auth.getUser();
-    const nueva = JSON.parse(JSON.stringify(config));
-
-    if (color === 'rojo') {
-      const lista = nueva.rojo.contactos;
-      if (lista.includes(contactoId)) {
-        nueva.rojo.contactos = lista.filter(id => id !== contactoId);
-      } else {
-        nueva.rojo.contactos = [...lista, contactoId];
-      }
-
-      await supabase.from('config_alertas')
-        .delete()
-        .eq('usuario_id', user.id)
-        .eq('color', 'rojo');
-
-      await supabase.from('config_alertas').insert({
-        usuario_id: user.id,
-        color: 'rojo',
-        mensaje_index: 0,
-        mensaje_texto: '',
-        contactos: nueva.rojo.contactos.join(','),
-      });
-
-      setConfig(nueva);
-      return;
-    }
-
-    // Para verde y amarillo: si está seleccionado, deseleccionar directo
-    const mapa = nueva[color].contactosPorMensaje[mensajeIndex];
-    if (mapa[contactoId]) {
-      delete mapa[contactoId];
-
-      await supabase.from('config_alertas')
-        .delete()
-        .eq('usuario_id', user.id)
-        .eq('color', color)
-        .eq('mensaje_index', mensajeIndex);
-
-      await supabase.from('config_alertas').insert({
-        usuario_id: user.id,
-        color,
-        mensaje_index: mensajeIndex,
-        mensaje_texto: nueva[color].mensajes[mensajeIndex],
-        contactos: Object.keys(nueva[color].contactosPorMensaje[mensajeIndex]).join(','),
-      });
-
-      setConfig(nueva);
-      return;
-    }
-
-    // Si no está seleccionado: verificar si ya hay invitación pendiente
-    const yaInvitado = invitacionesPendientes.some(
-      inv => inv.contacto_id === contactoId &&
-             inv.color === color &&
-             inv.mensaje_index === mensajeIndex
+    // Procesar nuevas invitaciones al guardar
+    const invitacionesParaEsteMensaje = nuevasInvitaciones.filter(
+      inv => inv.color === color && inv.mensajeIndex === index
     );
 
-    if (yaInvitado) {
-      mostrarToast('Ya enviaste una invitación pendiente a este contacto');
+    for (const inv of invitacionesParaEsteMensaje) {
+      await supabase.from('invitaciones_mensaje').insert({
+        invitador_id: user.id,
+        contacto_id: inv.contactoId,
+        color,
+        mensaje_index: index,
+        mensaje_texto: textoEdit,
+        estado: 'pendiente',
+      });
+
+      await fetch('/api/enviar-alerta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mensaje: `Te invitaron a ser contacto del mensaje "${textoEdit}"`,
+          contactos: [inv.contactoId],
+          color,
+          url: 'https://www.vysafe.com/notificaciones',
+        }),
+      });
+
+      setInvitacionesPendientes(prev => [...prev, {
+        invitador_id: user.id,
+        contacto_id: inv.contactoId,
+        color,
+        mensaje_index: index,
+        mensaje_texto: textoEdit,
+        estado: 'pendiente',
+      }]);
+    }
+
+    setNuevasInvitaciones(prev => prev.filter(
+      inv => !(inv.color === color && inv.mensajeIndex === index)
+    ));
+
+    setEditando(null);
+    if (invitacionesParaEsteMensaje.length > 0) {
+      mostrarToast(`✉️ ${invitacionesParaEsteMensaje.length} invitación(es) enviada(s)`);
+    }
+  }
+
+  function toggleContactoLocal(color, mensajeIndex, contactoId) {
+    const seleccionado = !!(config[color]?.contactosPorMensaje?.[mensajeIndex] || {})[contactoId];
+    const pendiente = invitacionesPendientes.some(
+      inv => inv.contacto_id === contactoId && inv.color === color && inv.mensaje_index === mensajeIndex
+    );
+    const nuevaInvitacion = nuevasInvitaciones.some(
+      inv => inv.contactoId === contactoId && inv.color === color && inv.mensajeIndex === mensajeIndex
+    );
+
+    if (seleccionado) {
+      // Quitar contacto aceptado
+      const nueva = JSON.parse(JSON.stringify(config));
+      delete nueva[color].contactosPorMensaje[mensajeIndex][contactoId];
+      setConfig(nueva);
       return;
     }
 
-    // Crear invitación
-    const mensajeTexto = nueva[color].mensajes[mensajeIndex];
-    await supabase.from('invitaciones_mensaje').insert({
-      invitador_id: user.id,
-      contacto_id: contactoId,
-      color,
-      mensaje_index: mensajeIndex,
-      mensaje_texto: mensajeTexto,
-      estado: 'pendiente',
+    if (pendiente) {
+      mostrarToast('Ya enviaste una invitación a este contacto');
+      return;
+    }
+
+    if (nuevaInvitacion) {
+      // Cancelar nueva invitación local
+      setNuevasInvitaciones(prev => prev.filter(
+        inv => !(inv.contactoId === contactoId && inv.color === color && inv.mensajeIndex === mensajeIndex)
+      ));
+      return;
+    }
+
+    // Agregar nueva invitación local (sin guardar aún)
+    setNuevasInvitaciones(prev => [...prev, { contactoId, color, mensajeIndex }]);
+  }
+
+  async function toggleContactoRojo(contactoId) {
+    const { data: { user } } = await supabase.auth.getUser();
+    const nueva = JSON.parse(JSON.stringify(config));
+    const lista = nueva.rojo.contactos;
+
+    if (lista.includes(contactoId)) {
+      nueva.rojo.contactos = lista.filter(id => id !== contactoId);
+    } else {
+      nueva.rojo.contactos = [...lista, contactoId];
+    }
+
+    await supabase.from('config_alertas')
+      .delete()
+      .eq('usuario_id', user.id)
+      .eq('color', 'rojo');
+
+    await supabase.from('config_alertas').insert({
+      usuario_id: user.id,
+      color: 'rojo',
+      mensaje_index: 0,
+      mensaje_texto: '',
+      contactos: nueva.rojo.contactos.join(','),
     });
 
-    // Enviar notificación push al contacto
-    await fetch('/api/enviar-alerta', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        mensaje: `Te invitaron a ser contacto del mensaje "${mensajeTexto}"`,
-        contactos: [contactoId],
-        color,
-      }),
-    });
-
-    setInvitacionesPendientes(prev => [...prev, {
-      invitador_id: user.id,
-      contacto_id: contactoId,
-      color,
-      mensaje_index: mensajeIndex,
-      mensaje_texto: mensajeTexto,
-      estado: 'pendiente',
-    }]);
-
-    mostrarToast('✉️ Invitación enviada — esperando respuesta');
+    setConfig(nueva);
   }
 
   async function retirarInvitacion(contactoId, color, mensajeIndex) {
@@ -371,7 +378,7 @@ export default function ConfigAlertas() {
 
       {editando && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
-          onClick={() => setEditando(null)}>
+          onClick={() => { setEditando(null); setNuevasInvitaciones([]); }}>
           <div style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 20, padding: 24, width: '100%', maxWidth: 360 }}
             onClick={e => e.stopPropagation()}>
             <h3 style={{ margin: '0 0 16px', fontSize: 16 }}>Editar mensaje</h3>
@@ -398,46 +405,49 @@ export default function ConfigAlertas() {
                            inv.color === editando.color &&
                            inv.mensaje_index === editando.index
                   );
+                  const nuevaInv = nuevasInvitaciones.some(
+                    inv => inv.contactoId === c.contacto_id &&
+                           inv.color === editando.color &&
+                           inv.mensajeIndex === editando.index
+                  );
                   const bg = colores.find(col => col.key === editando.color)?.bg || '#888';
+
+                  let bgColor = '#252525';
+                  let borderColor = '#333';
+                  if (seleccionado) { bgColor = '#1e3a2a'; borderColor = bg; }
+                  else if (pendiente) { bgColor = '#2a2a1a'; borderColor = '#f39c12'; }
+                  else if (nuevaInv) { bgColor = '#1a2a3a'; borderColor = '#3498db'; }
+
                   return (
                     <div
                       key={c.id}
-                      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', borderRadius: 10, background: seleccionado ? '#1e3a2a' : pendiente ? '#2a2a1a' : '#252525', border: `1px solid ${seleccionado ? bg : pendiente ? '#f39c12' : '#333'}`, cursor: 'pointer' }}
+                      onClick={() => toggleContactoLocal(editando.color, editando.index, c.contacto_id)}
+                      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 10, background: bgColor, border: `1px solid ${borderColor}`, cursor: pendiente ? 'default' : 'pointer', userSelect: 'none' }}
                     >
-                      <div
-                        onClick={() => !seleccionado && !pendiente && toggleContacto(editando.color, editando.index, c.contacto_id)}
-                        style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1 }}
-                      >
-                        <div style={{ width: 32, height: 32, borderRadius: '50%', background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 13 }}>
-                          {c.avatar_url
-                            ? <img src={c.avatar_url} alt={c.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
-                            : (c.nombre || 'S').charAt(0).toUpperCase()
-                          }
-                        </div>
-                        <div>
-                          <span style={{ fontSize: 14 }}>{c.nombre || 'Sin nombre'}</span>
-                          {pendiente && <p style={{ fontSize: 11, color: '#f39c12', margin: 0 }}>⏳ Invitación pendiente</p>}
-                          {seleccionado && <p style={{ fontSize: 11, color: bg, margin: 0 }}>✅ Aceptado</p>}
-                        </div>
+                      <div style={{ width: 32, height: 32, borderRadius: '50%', background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 13, overflow: 'hidden', flexShrink: 0 }}>
+                        {c.avatar_url
+                          ? <img src={c.avatar_url} alt={c.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          : (c.nombre || 'S').charAt(0).toUpperCase()
+                        }
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <span style={{ fontSize: 14 }}>{c.nombre || 'Sin nombre'}</span>
+                        {pendiente && <p style={{ fontSize: 11, color: '#f39c12', margin: 0 }}>⏳ Pendiente de respuesta</p>}
+                        {nuevaInv && <p style={{ fontSize: 11, color: '#3498db', margin: 0 }}>📨 Se enviará al guardar</p>}
+                        {seleccionado && <p style={{ fontSize: 11, color: bg, margin: 0 }}>✅ Aceptado</p>}
                       </div>
                       {pendiente && (
                         <button
-                          onClick={() => retirarInvitacion(c.contacto_id, editando.color, editando.index)}
-                          style={{ background: 'transparent', border: '1px solid #e74c3c', borderRadius: 8, color: '#e74c3c', fontSize: 11, padding: '4px 8px', cursor: 'pointer' }}
+                          onClick={e => { e.stopPropagation(); retirarInvitacion(c.contacto_id, editando.color, editando.index); }}
+                          style={{ background: 'transparent', border: '1px solid #e74c3c', borderRadius: 8, color: '#e74c3c', fontSize: 11, padding: '4px 8px', cursor: 'pointer', flexShrink: 0 }}
                         >
                           Retirar
                         </button>
                       )}
-                      {seleccionado && (
-                        <button
-                          onClick={() => toggleContacto(editando.color, editando.index, c.contacto_id)}
-                          style={{ background: 'transparent', border: '1px solid #e74c3c', borderRadius: 8, color: '#e74c3c', fontSize: 11, padding: '4px 8px', cursor: 'pointer' }}
-                        >
-                          Quitar
-                        </button>
-                      )}
-                      {!seleccionado && !pendiente && (
-                        <div style={{ width: 20, height: 20, borderRadius: '50%', border: '2px solid #444', background: 'transparent' }} />
+                      {!pendiente && (
+                        <div style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${seleccionado ? bg : nuevaInv ? '#3498db' : '#444'}`, background: seleccionado ? bg : nuevaInv ? '#3498db' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#fff', flexShrink: 0 }}>
+                          {(seleccionado || nuevaInv) && '✓'}
+                        </div>
                       )}
                     </div>
                   );
@@ -446,7 +456,7 @@ export default function ConfigAlertas() {
             )}
 
             <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={() => setEditando(null)}
+              <button onClick={() => { setEditando(null); setNuevasInvitaciones([]); }}
                 style={{ flex: 1, padding: 10, borderRadius: 10, border: '1px solid #333', background: 'transparent', color: '#888', fontSize: 14, cursor: 'pointer' }}>
                 Cancelar
               </button>
@@ -493,12 +503,12 @@ export default function ConfigAlertas() {
                       return (
                         <div
                           key={c.id}
-                          onClick={() => toggleContacto('rojo', 0, c.contacto_id)}
-                          style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 10, background: seleccionado ? '#3a1a1a' : '#1a1a1a', border: `1px solid ${seleccionado ? '#e74c3c' : '#2a2a2a'}`, cursor: 'pointer' }}
+                          onClick={() => toggleContactoRojo(c.contacto_id)}
+                          style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 10, background: seleccionado ? '#3a1a1a' : '#1a1a1a', border: `1px solid ${seleccionado ? '#e74c3c' : '#2a2a2a'}`, cursor: 'pointer', userSelect: 'none' }}
                         >
-                          <div style={{ width: 36, height: 36, borderRadius: '50%', background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 14 }}>
+                          <div style={{ width: 36, height: 36, borderRadius: '50%', background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 14, overflow: 'hidden', flexShrink: 0 }}>
                             {c.avatar_url
-                              ? <img src={c.avatar_url} alt={c.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+                              ? <img src={c.avatar_url} alt={c.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                               : (c.nombre || 'S').charAt(0).toUpperCase()
                             }
                           </div>
@@ -522,7 +532,7 @@ export default function ConfigAlertas() {
                         <div style={{ position: 'relative', display: 'flex', alignItems: 'center', padding: '12px 14px', gap: 10 }}>
                           <span style={{ flex: 1, fontSize: 14, color: '#ccc' }}>{msg}</span>
                           <button
-                            onClick={() => { setEditando({ color: key, index: i }); setTextoEdit(msg); }}
+                            onClick={() => { setEditando({ color: key, index: i }); setTextoEdit(msg); setNuevasInvitaciones([]); }}
                             style={{ background: 'transparent', border: 'none', color: '#888', fontSize: 18, cursor: 'pointer', padding: '4px 6px' }}
                           >✏️</button>
                           <button
