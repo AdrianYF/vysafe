@@ -8,6 +8,8 @@ export default function Unirse() {
   const [estado, setEstado] = useState('cargando');
   const [invitador, setInvitador] = useState(null);
   const [nombreInvitador, setNombreInvitador] = useState('');
+  const [avatarInvitador, setAvatarInvitador] = useState(null);
+  const [emailInvitador, setEmailInvitador] = useState(null);
   const [sessionActiva, setSessionActiva] = useState(null);
   const [procesando, setProcesando] = useState(false);
   const [esPermanente, setEsPermanente] = useState(false);
@@ -23,7 +25,6 @@ export default function Unirse() {
       .maybeSingle();
 
     if (perfil) {
-      // Si ya está logueado, verificar si ya es contacto
       if (session) {
         const { data: yaExiste } = await supabase
           .from('contactos')
@@ -37,7 +38,6 @@ export default function Unirse() {
           return;
         }
 
-        // Evitar que alguien se agregue a sí mismo
         if (session.user.id === perfil.id) {
           navigate('/home');
           return;
@@ -49,12 +49,30 @@ export default function Unirse() {
 
       const { data: contactoData } = await supabase
         .from('contactos')
-        .select('nombre, avatar_url')
+        .select('nombre, avatar_url, email')
         .eq('usuario_id', perfil.id)
+        .not('avatar_url', 'is', null)
         .limit(1)
         .maybeSingle();
 
       if (contactoData?.nombre) setNombreInvitador(contactoData.nombre);
+      if (contactoData?.avatar_url) setAvatarInvitador(contactoData.avatar_url);
+      if (contactoData?.email) setEmailInvitador(contactoData.email);
+
+      // Si no encontró con avatar, buscar cualquier fila
+      if (!contactoData) {
+        const { data: contactoData2 } = await supabase
+          .from('contactos')
+          .select('nombre, avatar_url, email')
+          .eq('usuario_id', perfil.id)
+          .limit(1)
+          .maybeSingle();
+
+        if (contactoData2?.nombre) setNombreInvitador(contactoData2.nombre);
+        if (contactoData2?.avatar_url) setAvatarInvitador(contactoData2.avatar_url);
+        if (contactoData2?.email) setEmailInvitador(contactoData2.email);
+      }
+
       setEstado('valido');
       return;
     }
@@ -108,7 +126,6 @@ export default function Unirse() {
       return;
     }
 
-    // Verificar duplicados
     const { data: yaExiste } = await supabase
       .from('contactos')
       .select('id')
@@ -150,8 +167,8 @@ export default function Unirse() {
         usuario_id: user.id,
         contacto_id: invitadorId,
         nombre: nombreInvitador || 'Contacto VySafe',
-        avatar_url: null,
-        email: null,
+        avatar_url: avatarInvitador || null,
+        email: emailInvitador || null,
         tipo: 'alerta',
         alerta_verde: true,
         alerta_amarilla: true,
