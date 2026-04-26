@@ -19,7 +19,6 @@ function getInstrucciones(label) {
 
 export default function ConfigAlertas() {
   const navigate = useNavigate();
-  const [user, setUser] = useState(null);
   const [contactos, setContactos] = useState([]);
   const [config, setConfig] = useState(null);
   const [seccionAbierta, setSeccionAbierta] = useState(null);
@@ -35,7 +34,6 @@ export default function ConfigAlertas() {
 
   const cargarDatos = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
-    setUser(user);
 
     const { data: contactosData } = await supabase
       .from('contactos')
