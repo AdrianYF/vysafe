@@ -29,7 +29,6 @@ export default async function handler(req, res) {
       contents: { en: mensaje, es: mensaje },
       headings: { en: '🚨 VySafe', es: '🚨 VySafe' },
       android_sound: sonido,
-      android_channel_id: sonido,
     }),
   });
 
