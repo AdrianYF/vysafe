@@ -70,7 +70,6 @@ function Home() {
   const cargarTodo = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
 
-    // Setear External ID en OneSignal
     if (window.OneSignalDeferred) {
       window.OneSignalDeferred.push(async function(OneSignal) {
         try {
@@ -116,7 +115,7 @@ function Home() {
       await fetch('/api/enviar-alerta', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mensaje, contactos: contactosDestino }),
+        body: JSON.stringify({ mensaje, contactos: contactosDestino, color: tipoAlerta }),
       });
     } catch (e) {
       console.error('Error enviando alerta:', e);

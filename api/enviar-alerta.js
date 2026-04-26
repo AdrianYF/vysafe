@@ -3,11 +3,19 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' });
   }
 
-  const { mensaje, contactos } = req.body;
+  const { mensaje, contactos, color } = req.body;
 
   if (!contactos || contactos.length === 0) {
     return res.status(200).json({ ok: true, mensaje: 'Sin contactos' });
   }
+
+  const sonidos = {
+    verde: 'alerta-verde',
+    amarillo: 'alerta-amarilla',
+    rojo: 'alerta-roja',
+  };
+
+  const sonido = sonidos[color] || 'alerta-verde';
 
   const response = await fetch('https://onesignal.com/api/v1/notifications', {
     method: 'POST',
@@ -20,6 +28,8 @@ export default async function handler(req, res) {
       include_external_user_ids: contactos,
       contents: { en: mensaje, es: mensaje },
       headings: { en: '🚨 VySafe', es: '🚨 VySafe' },
+      android_sound: sonido,
+      android_channel_id: sonido,
     }),
   });
 
