@@ -19,6 +19,7 @@ function getInstrucciones(label) {
 
 export default function ConfigAlertas() {
   const navigate = useNavigate();
+  const [user, setUser] = useState(null);
   const [contactos, setContactos] = useState([]);
   const [config, setConfig] = useState(null);
   const [seccionAbierta, setSeccionAbierta] = useState(null);
@@ -28,10 +29,13 @@ export default function ConfigAlertas() {
   const [deleteProgress, setDeleteProgress] = useState({});
   const [mostrarInstrucciones, setMostrarInstrucciones] = useState(null);
   const [bloqueandoAgregar, setBloqueandoAgregar] = useState({});
+  const [invitacionesPendientes, setInvitacionesPendientes] = useState([]);
+  const [toast, setToast] = useState(null);
   const deleteTimers = useRef({});
 
   const cargarDatos = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
+    setUser(user);
 
     const { data: contactosData } = await supabase
       .from('contactos')
@@ -45,6 +49,14 @@ export default function ConfigAlertas() {
       .eq('usuario_id', user.id);
 
     setConfig(armarConfig(configData || []));
+
+    const { data: invitaciones } = await supabase
+      .from('invitaciones_mensaje')
+      .select('*')
+      .eq('invitador_id', user.id)
+      .eq('estado', 'pendiente');
+
+    setInvitacionesPendientes(invitaciones || []);
     setLoading(false);
   }, []);
 
@@ -102,6 +114,11 @@ export default function ConfigAlertas() {
     return cfg;
   }
 
+  function mostrarToast(msg) {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3000);
+  }
+
   async function guardarMensaje(color, index) {
     const { data: { user } } = await supabase.auth.getUser();
     const nueva = JSON.parse(JSON.stringify(config));
@@ -149,13 +166,15 @@ export default function ConfigAlertas() {
         mensaje_texto: '',
         contactos: nueva.rojo.contactos.join(','),
       });
-    } else {
-      const mapa = nueva[color].contactosPorMensaje[mensajeIndex];
-      if (mapa[contactoId]) {
-        delete mapa[contactoId];
-      } else {
-        mapa[contactoId] = true;
-      }
+
+      setConfig(nueva);
+      return;
+    }
+
+    // Para verde y amarillo: si está seleccionado, deseleccionar directo
+    const mapa = nueva[color].contactosPorMensaje[mensajeIndex];
+    if (mapa[contactoId]) {
+      delete mapa[contactoId];
 
       await supabase.from('config_alertas')
         .delete()
@@ -170,9 +189,72 @@ export default function ConfigAlertas() {
         mensaje_texto: nueva[color].mensajes[mensajeIndex],
         contactos: Object.keys(nueva[color].contactosPorMensaje[mensajeIndex]).join(','),
       });
+
+      setConfig(nueva);
+      return;
     }
 
-    setConfig(nueva);
+    // Si no está seleccionado: verificar si ya hay invitación pendiente
+    const yaInvitado = invitacionesPendientes.some(
+      inv => inv.contacto_id === contactoId &&
+             inv.color === color &&
+             inv.mensaje_index === mensajeIndex
+    );
+
+    if (yaInvitado) {
+      mostrarToast('Ya enviaste una invitación pendiente a este contacto');
+      return;
+    }
+
+    // Crear invitación
+    const mensajeTexto = nueva[color].mensajes[mensajeIndex];
+    await supabase.from('invitaciones_mensaje').insert({
+      invitador_id: user.id,
+      contacto_id: contactoId,
+      color,
+      mensaje_index: mensajeIndex,
+      mensaje_texto: mensajeTexto,
+      estado: 'pendiente',
+    });
+
+    // Enviar notificación push al contacto
+    await fetch('/api/enviar-alerta', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mensaje: `Te invitaron a ser contacto del mensaje "${mensajeTexto}"`,
+        contactos: [contactoId],
+        color,
+      }),
+    });
+
+    setInvitacionesPendientes(prev => [...prev, {
+      invitador_id: user.id,
+      contacto_id: contactoId,
+      color,
+      mensaje_index: mensajeIndex,
+      mensaje_texto: mensajeTexto,
+      estado: 'pendiente',
+    }]);
+
+    mostrarToast('✉️ Invitación enviada — esperando respuesta');
+  }
+
+  async function retirarInvitacion(contactoId, color, mensajeIndex) {
+    const { data: { user } } = await supabase.auth.getUser();
+    await supabase
+      .from('invitaciones_mensaje')
+      .delete()
+      .eq('invitador_id', user.id)
+      .eq('contacto_id', contactoId)
+      .eq('color', color)
+      .eq('mensaje_index', mensajeIndex);
+
+    setInvitacionesPendientes(prev => prev.filter(
+      inv => !(inv.contacto_id === contactoId && inv.color === color && inv.mensaje_index === mensajeIndex)
+    ));
+
+    mostrarToast('Invitación retirada');
   }
 
   function iniciarDelete(color, index) {
@@ -258,6 +340,12 @@ export default function ConfigAlertas() {
   return (
     <div style={{ minHeight: '100vh', background: '#0d0d0d', fontFamily: 'sans-serif', color: '#fff', paddingBottom: 100 }}>
 
+      {toast && (
+        <div style={{ position: 'fixed', top: 20, left: '50%', transform: 'translateX(-50%)', background: '#2a2a2a', border: '1px solid #333', borderRadius: 12, padding: '10px 20px', fontSize: 14, color: '#fff', zIndex: 999, whiteSpace: 'nowrap' }}>
+          {toast}
+        </div>
+      )}
+
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '20px 20px 10px', borderBottom: '1px solid #1a1a1a' }}>
         <button onClick={() => navigate('/home')} style={{ background: 'transparent', border: 'none', color: '#888', fontSize: 22, cursor: 'pointer' }}>←</button>
         <span style={{ fontSize: 18, fontWeight: 600 }}>Configuración de alertas</span>
@@ -307,20 +395,52 @@ export default function ConfigAlertas() {
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
                 {contactos.map(c => {
                   const seleccionado = !!(config[editando.color]?.contactosPorMensaje?.[editando.index] || {})[c.contacto_id];
+                  const pendiente = invitacionesPendientes.some(
+                    inv => inv.contacto_id === c.contacto_id &&
+                           inv.color === editando.color &&
+                           inv.mensaje_index === editando.index
+                  );
                   const bg = colores.find(col => col.key === editando.color)?.bg || '#888';
                   return (
                     <div
                       key={c.id}
-                      onClick={() => toggleContacto(editando.color, editando.index, c.contacto_id)}
-                      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', borderRadius: 10, background: seleccionado ? '#1e3a2a' : '#252525', border: `1px solid ${seleccionado ? bg : '#333'}`, cursor: 'pointer' }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '8px 12px', borderRadius: 10, background: seleccionado ? '#1e3a2a' : pendiente ? '#2a2a1a' : '#252525', border: `1px solid ${seleccionado ? bg : pendiente ? '#f39c12' : '#333'}`, cursor: 'pointer' }}
                     >
-                      <div style={{ width: 32, height: 32, borderRadius: '50%', background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 13 }}>
-                        {(c.nombre || 'S').charAt(0).toUpperCase()}
+                      <div
+                        onClick={() => !seleccionado && !pendiente && toggleContacto(editando.color, editando.index, c.contacto_id)}
+                        style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1 }}
+                      >
+                        <div style={{ width: 32, height: 32, borderRadius: '50%', background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 13 }}>
+                          {c.avatar_url
+                            ? <img src={c.avatar_url} alt={c.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+                            : (c.nombre || 'S').charAt(0).toUpperCase()
+                          }
+                        </div>
+                        <div>
+                          <span style={{ fontSize: 14 }}>{c.nombre || 'Sin nombre'}</span>
+                          {pendiente && <p style={{ fontSize: 11, color: '#f39c12', margin: 0 }}>⏳ Invitación pendiente</p>}
+                          {seleccionado && <p style={{ fontSize: 11, color: bg, margin: 0 }}>✅ Aceptado</p>}
+                        </div>
                       </div>
-                      <span style={{ fontSize: 14 }}>{c.nombre || 'Sin nombre'}</span>
-                      <div style={{ marginLeft: 'auto', width: 20, height: 20, borderRadius: '50%', border: `2px solid ${seleccionado ? bg : '#444'}`, background: seleccionado ? bg : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#fff' }}>
-                        {seleccionado && '✓'}
-                      </div>
+                      {pendiente && (
+                        <button
+                          onClick={() => retirarInvitacion(c.contacto_id, editando.color, editando.index)}
+                          style={{ background: 'transparent', border: '1px solid #e74c3c', borderRadius: 8, color: '#e74c3c', fontSize: 11, padding: '4px 8px', cursor: 'pointer' }}
+                        >
+                          Retirar
+                        </button>
+                      )}
+                      {seleccionado && (
+                        <button
+                          onClick={() => toggleContacto(editando.color, editando.index, c.contacto_id)}
+                          style={{ background: 'transparent', border: '1px solid #e74c3c', borderRadius: 8, color: '#e74c3c', fontSize: 11, padding: '4px 8px', cursor: 'pointer' }}
+                        >
+                          Quitar
+                        </button>
+                      )}
+                      {!seleccionado && !pendiente && (
+                        <div style={{ width: 20, height: 20, borderRadius: '50%', border: '2px solid #444', background: 'transparent' }} />
+                      )}
                     </div>
                   );
                 })}
@@ -379,7 +499,10 @@ export default function ConfigAlertas() {
                           style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 10, background: seleccionado ? '#3a1a1a' : '#1a1a1a', border: `1px solid ${seleccionado ? '#e74c3c' : '#2a2a2a'}`, cursor: 'pointer' }}
                         >
                           <div style={{ width: 36, height: 36, borderRadius: '50%', background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 14 }}>
-                            {(c.nombre || 'S').charAt(0).toUpperCase()}
+                            {c.avatar_url
+                              ? <img src={c.avatar_url} alt={c.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+                              : (c.nombre || 'S').charAt(0).toUpperCase()
+                            }
                           </div>
                           <span style={{ fontSize: 14 }}>{c.nombre || 'Sin nombre'}</span>
                           <div style={{ marginLeft: 'auto', width: 20, height: 20, borderRadius: '50%', border: `2px solid ${seleccionado ? '#e74c3c' : '#444'}`, background: seleccionado ? '#e74c3c' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#fff' }}>
