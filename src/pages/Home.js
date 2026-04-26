@@ -43,25 +43,48 @@ function Home() {
 
   const armarConfig = useCallback((rows) => {
     const cfg = {
-      verde: { mensajes: [...defaultConfig.verde.mensajes], contactosPorMensaje: [{}, {}, {}] },
-      amarillo: { mensajes: [...defaultConfig.amarillo.mensajes], contactosPorMensaje: [{}, {}, {}] },
+      verde: { mensajes: [], contactosPorMensaje: [] },
+      amarillo: { mensajes: [], contactosPorMensaje: [] },
       rojo: { contactos: [] },
     };
+
+    const tieneFilas = { verde: false, amarillo: false };
 
     rows.forEach(row => {
       if (row.color === 'rojo') {
         cfg.rojo.contactos = row.contactos ? row.contactos.split(',').filter(Boolean) : [];
-      } else {
+      } else if (cfg[row.color]) {
+        tieneFilas[row.color] = true;
         const i = row.mensaje_index;
-        if (cfg[row.color]) {
-          if (row.mensaje_texto) cfg[row.color].mensajes[i] = row.mensaje_texto;
-          if (row.contactos) {
-            cfg[row.color].contactosPorMensaje[i] = {};
-            row.contactos.split(',').filter(Boolean).forEach(id => {
-              cfg[row.color].contactosPorMensaje[i][id] = true;
-            });
-          }
+        while (cfg[row.color].mensajes.length <= i) {
+          cfg[row.color].mensajes.push(null);
+          cfg[row.color].contactosPorMensaje.push({});
         }
+        cfg[row.color].mensajes[i] = row.mensaje_texto || null;
+        if (row.contactos) {
+          cfg[row.color].contactosPorMensaje[i] = {};
+          row.contactos.split(',').filter(Boolean).forEach(id => {
+            cfg[row.color].contactosPorMensaje[i][id] = true;
+          });
+        }
+      }
+    });
+
+    ['verde', 'amarillo'].forEach(color => {
+      if (!tieneFilas[color]) {
+        cfg[color].mensajes = [...defaultConfig[color].mensajes];
+        cfg[color].contactosPorMensaje = [{}, {}, {}];
+      } else {
+        const mensajesFiltrados = [];
+        const contactosFiltrados = [];
+        cfg[color].mensajes.forEach((msg, i) => {
+          if (msg !== null && msg !== '__borrado__') {
+            mensajesFiltrados.push(msg);
+            contactosFiltrados.push(cfg[color].contactosPorMensaje[i] || {});
+          }
+        });
+        cfg[color].mensajes = mensajesFiltrados;
+        cfg[color].contactosPorMensaje = contactosFiltrados;
       }
     });
 
