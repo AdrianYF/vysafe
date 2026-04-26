@@ -35,6 +35,7 @@ function Home() {
   const [cerrarProgress, setCerrarProgress] = useState(0);
   const [contactos, setContactos] = useState([]);
   const [config, setConfig] = useState(defaultConfig);
+  const [sinContactosAviso, setSinContactosAviso] = useState(false);
   const redInterval = useRef(null);
   const msgTimer = useRef(null);
   const cerrarTimer = useRef(null);
@@ -134,20 +135,30 @@ function Home() {
         contactosDestino = Object.keys(mapa);
       }
 
-      if (contactosDestino.length === 0) return;
+      if (contactosDestino.length === 0) return false;
 
       await fetch('/api/enviar-alerta', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ mensaje, contactos: contactosDestino, color: tipoAlerta }),
       });
+
+      return true;
     } catch (e) {
       console.error('Error enviando alerta:', e);
+      return false;
     }
   }
 
-  const mostrarConfirmacion = (msg, tipoAlerta, msgIdx) => {
-    enviarAlerta(msg, tipoAlerta, msgIdx);
+  const mostrarConfirmacion = async (msg, tipoAlerta, msgIdx) => {
+    const enviado = await enviarAlerta(msg, tipoAlerta, msgIdx);
+
+    if (!enviado) {
+      setSinContactosAviso(true);
+      setTimeout(() => setSinContactosAviso(false), 3000);
+      return;
+    }
+
     setConfirmacion({ msg, tipoAlerta, msgIdx });
     setCerrarProgress(0);
     let progress = 0;
@@ -246,6 +257,17 @@ function Home() {
   return (
     <div className="home-container">
       <div ref={overlayRef} className="red-overlay" />
+
+      {sinContactosAviso && (
+        <div style={{
+          position: 'fixed', top: 20, left: '50%', transform: 'translateX(-50%)',
+          background: '#e74c3c', borderRadius: 12, padding: '12px 20px',
+          fontSize: 14, color: '#fff', zIndex: 999, whiteSpace: 'nowrap',
+          boxShadow: '0 4px 20px rgba(231,76,60,0.4)'
+        }}>
+          ⚠️ No hay contactos asignados a este mensaje
+        </div>
+      )}
 
       {redHolding && (
         <div className="red-countdown">
@@ -354,19 +376,15 @@ function Home() {
             <p className="confirmacion-mensaje">{confirmacion.msg}</p>
             <p className="confirmacion-subtitulo">fue enviada a</p>
             <div className="confirmacion-contactos">
-              {contactosConfirmacion.length === 0 ? (
-                <p style={{ color: '#555', fontSize: 13 }}>Sin contactos configurados</p>
-              ) : (
-                contactosConfirmacion.map((c) => (
-                  <div key={c.id} className="confirmacion-avatar">
-                    {c.avatar_url ? (
-                      <img src={c.avatar_url} alt={c.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
-                    ) : (
-                      (c.nombre || 'S').charAt(0).toUpperCase()
-                    )}
-                  </div>
-                ))
-              )}
+              {contactosConfirmacion.map((c) => (
+                <div key={c.id} className="confirmacion-avatar">
+                  {c.avatar_url ? (
+                    <img src={c.avatar_url} alt={c.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover', borderRadius: '50%' }} />
+                  ) : (
+                    (c.nombre || 'S').charAt(0).toUpperCase()
+                  )}
+                </div>
+              ))}
             </div>
             <button className="btn-cerrar-confirmacion" onClick={cerrarConfirmacion}>
               <div className="btn-cerrar-barra" style={{ width: `${cerrarProgress}%` }} />
