@@ -81,13 +81,11 @@ export default function ConfigAlertas() {
       }
     });
 
-    // Si no tiene filas en BD, usar defaults
     ['verde', 'amarillo'].forEach(color => {
       if (!tieneFilas[color]) {
         cfg[color].mensajes = [...defaultMensajes[color]];
         cfg[color].contactosPorMensaje = [{}, {}, {}];
       } else {
-        // Filtrar nulls (mensajes borrados)
         const mensajesFiltrados = [];
         const contactosFiltrados = [];
         cfg[color].mensajes.forEach((msg, i) => {
@@ -221,7 +219,6 @@ export default function ConfigAlertas() {
       }));
       await supabase.from('config_alertas').insert(rows);
     } else {
-      // Guardar fila marcadora para indicar que el usuario borró todo
       await supabase.from('config_alertas').insert({
         usuario_id: user.id,
         color,
@@ -240,7 +237,7 @@ export default function ConfigAlertas() {
 
   function descargarRingtone(key, label) {
     const a = document.createElement('a');
-    a.href = `/alerta-${key}.wav`;
+    a.href = `/VySafe-${label}.wav`;
     a.download = `VySafe-${label}.wav`;
     a.click();
     setMostrarInstrucciones(label);

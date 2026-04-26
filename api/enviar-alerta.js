@@ -10,12 +10,12 @@ export default async function handler(req, res) {
   }
 
   const sonidos = {
-    verde: 'alerta-verde',
-    amarillo: 'alerta-amarilla',
-    rojo: 'alerta-roja',
+    verde: 'VySafe-Verde',
+    amarillo: 'VySafe-Amarilla',
+    rojo: 'VySafe-Roja',
   };
 
-  const sonido = sonidos[color] || 'alerta-verde';
+  const sonido = sonidos[color] || 'VySafe-Verde';
 
   const response = await fetch('https://onesignal.com/api/v1/notifications', {
     method: 'POST',
