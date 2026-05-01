@@ -81,30 +81,38 @@ export default function Contactos({ soloInvitar = false, onCerrar = null }) {
     cargarConfig();
     cargarInvitacionesPendientes();
 
-    const setupRealtime = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      const channel = supabase
-        .channel('contactos-changes')
-        .on('postgres_changes', {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'contactos',
-          filter: `usuario_id=eq.${user.id}`,
-        }, (payload) => {
-          setContactos(prev => {
-            const yaExiste = prev.find(c => c.id === payload.new.id);
-            if (yaExiste) return prev;
-            mostrarToast(`🎉 ¡${payload.new.nombre || 'Alguien'} ya es tu contacto! Asignalo a un mensaje.`);
-            return [...prev, payload.new];
-          });
-        })
-        .subscribe();
-      return channel;
-    };
+    let channelRef = { current: null };
 
-    let channel;
-    setupRealtime().then(ch => { channel = ch; });
-    return () => { if (channel) supabase.removeChannel(channel); };
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      const nombreCanal = `contactos-${user.id}`;
+      const existente = supabase.getChannels().find(c => c.topic === `realtime:${nombreCanal}`);
+      if (existente) supabase.removeChannel(existente);
+
+      channelRef.current = supabase
+        .channel(nombreCanal)
+        .on(
+          'postgres_changes',
+          {
+            event: 'INSERT',
+            schema: 'public',
+            table: 'contactos',
+            filter: `usuario_id=eq.${user.id}`,
+          },
+          (payload) => {
+            setContactos(prev => {
+              const yaExiste = prev.find(c => c.id === payload.new.id);
+              if (yaExiste) return prev;
+              mostrarToast(`🎉 ¡${payload.new.nombre || 'Alguien'} ya es tu contacto! Asignalo a un mensaje.`);
+              return [...prev, payload.new];
+            });
+          }
+        )
+        .subscribe();
+    });
+
+    return () => {
+      if (channelRef.current) supabase.removeChannel(channelRef.current);
+    };
   }, [soloInvitar, cargarContactos, cargarConfig, cargarInvitacionesPendientes]);
 
   useEffect(() => {
@@ -159,14 +167,12 @@ export default function Contactos({ soloInvitar = false, onCerrar = null }) {
   async function guardarEdicion(contactoId, contactoUid) {
     const { data: { user } } = await supabase.auth.getUser();
 
-    // Guardar apodo
     await supabase.from('contactos').update({ nombre: apodo }).eq('id', contactoId);
     setContactos(prev => prev.map(c => c.id === contactoId ? { ...c, nombre: apodo } : c));
 
     const nuevaConfig = JSON.parse(JSON.stringify(configAlertas));
     const nuevasInvitaciones = [];
 
-    // Para verde y amarillo: crear invitaciones para los nuevos
     for (const color of ['verde', 'amarillo']) {
       for (let i = 0; i < nuevaConfig[color].mensajes.length; i++) {
         const key = `${color}-${i}`;
@@ -176,20 +182,17 @@ export default function Contactos({ soloInvitar = false, onCerrar = null }) {
         );
 
         if (asignaciones[key] && !yaAceptado && !yaPendiente) {
-          // Es nuevo — crear invitación
           nuevasInvitaciones.push({
             color,
             mensajeIndex: i,
             mensajeTexto: nuevaConfig[color].mensajes[i],
           });
         } else if (!asignaciones[key] && yaAceptado) {
-          // Lo quitaron — remover de config
           delete nuevaConfig[color].contactosPorMensaje[i][contactoUid];
         }
       }
     }
 
-    // Para rojo: guardar directo (emergencia, no requiere invitación)
     if (asignaciones['rojo']) {
       if (!nuevaConfig.rojo.contactos.includes(contactoUid)) {
         nuevaConfig.rojo.contactos.push(contactoUid);
@@ -198,7 +201,6 @@ export default function Contactos({ soloInvitar = false, onCerrar = null }) {
       nuevaConfig.rojo.contactos = nuevaConfig.rojo.contactos.filter(id => id !== contactoUid);
     }
 
-    // Guardar config en Supabase (solo rojo y los ya aceptados)
     await supabase.from('config_alertas').delete().eq('usuario_id', user.id);
 
     const rows = [];
@@ -224,7 +226,6 @@ export default function Contactos({ soloInvitar = false, onCerrar = null }) {
     await supabase.from('config_alertas').insert(rows);
     setConfigAlertas(nuevaConfig);
 
-    // Crear invitaciones y mandar UNA sola push
     if (nuevasInvitaciones.length > 0) {
       for (const inv of nuevasInvitaciones) {
         await supabase.from('invitaciones_mensaje').insert({
@@ -237,7 +238,6 @@ export default function Contactos({ soloInvitar = false, onCerrar = null }) {
         });
       }
 
-      // Una sola push
       const nombreInvitador = user.user_metadata?.full_name || user.user_metadata?.nombre || user.email;
       await fetch('/api/enviar-alerta', {
         method: 'POST',
@@ -287,6 +287,19 @@ export default function Contactos({ soloInvitar = false, onCerrar = null }) {
     { key: 'amarillo', label: 'Amarillo', bg: '#f39c12', emoji: '🟡' },
     { key: 'rojo', label: 'Rojo', bg: '#e74c3c', emoji: '🔴' },
   ];
+
+  // Componente reutilizable para el indicador de asignación
+  const Indicador = ({ asignado, pendiente, desasignando }) => {
+    if (pendiente) return <span style={{ fontSize: 11, color: '#f39c12' }}>⏳</span>;
+    if (desasignando) return (
+      <div style={{ width: 20, height: 20, borderRadius: '50%', border: '2px solid #e74c3c', background: 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#e74c3c' }}>✕</div>
+    );
+    return (
+      <div style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${asignado ? '#2ecc71' : '#444'}`, background: asignado ? '#2ecc71' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#fff' }}>
+        {asignado && '✓'}
+      </div>
+    );
+  };
 
   const ModalLink = ({ onCerrarModal }) => (
     <div className="modal-overlay" onClick={onCerrarModal}>
@@ -381,10 +394,10 @@ export default function Contactos({ soloInvitar = false, onCerrar = null }) {
                 {key === 'rojo' ? (
                   <div
                     onClick={() => setAsignaciones(prev => ({ ...prev, rojo: !prev.rojo }))}
-                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 10, background: asignaciones['rojo'] ? '#3a1a1a' : '#252525', border: `1px solid ${asignaciones['rojo'] ? bg : '#333'}`, cursor: 'pointer' }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 10, background: asignaciones['rojo'] ? '#1e3a2a' : '#252525', border: `1px solid ${asignaciones['rojo'] ? '#2ecc71' : '#333'}`, cursor: 'pointer' }}
                   >
                     <span style={{ flex: 1, fontSize: 14, color: '#ccc' }}>🚨 Alerta de emergencia</span>
-                    <div style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${asignaciones['rojo'] ? bg : '#444'}`, background: asignaciones['rojo'] ? bg : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#fff' }}>
+                    <div style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${asignaciones['rojo'] ? '#2ecc71' : '#444'}`, background: asignaciones['rojo'] ? '#2ecc71' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#fff' }}>
                       {asignaciones['rojo'] && '✓'}
                     </div>
                   </div>
@@ -395,23 +408,24 @@ export default function Contactos({ soloInvitar = false, onCerrar = null }) {
                     const yaPendiente = invitacionesPendientes.some(
                       inv => inv.contacto_id === editando?.contacto_id && inv.color === key && inv.mensaje_index === i
                     );
+                    const desasignando = yaAceptado && !asignaciones[k];
                     return (
                       <div
                         key={i}
                         onClick={() => {
-                          if (yaAceptado || yaPendiente) return;
+                          if (yaPendiente) return;
                           setAsignaciones(prev => ({ ...prev, [k]: !prev[k] }));
                         }}
-                        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 10, background: yaAceptado ? '#1e3a2a' : yaPendiente ? '#2a2a1a' : asignaciones[k] ? '#1a2a3a' : '#252525', border: `1px solid ${yaAceptado ? bg : yaPendiente ? '#f39c12' : asignaciones[k] ? '#3498db' : '#333'}`, cursor: yaAceptado || yaPendiente ? 'default' : 'pointer', marginBottom: 6 }}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 10,
+                          background: desasignando ? '#2a1a1a' : asignaciones[k] ? '#1e3a2a' : yaPendiente ? '#2a2a1a' : '#252525',
+                          border: `1px solid ${desasignando ? '#e74c3c' : asignaciones[k] ? '#2ecc71' : yaPendiente ? '#f39c12' : '#333'}`,
+                          cursor: yaPendiente ? 'default' : 'pointer',
+                          marginBottom: 6
+                        }}
                       >
                         <span style={{ flex: 1, fontSize: 14, color: '#ccc' }}>{msg}</span>
-                        {yaPendiente && <span style={{ fontSize: 11, color: '#f39c12' }}>⏳</span>}
-                        {yaAceptado && <span style={{ fontSize: 11, color: bg }}>✅</span>}
-                        {!yaAceptado && !yaPendiente && (
-                          <div style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${asignaciones[k] ? '#3498db' : '#444'}`, background: asignaciones[k] ? '#3498db' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#fff' }}>
-                            {asignaciones[k] && '✓'}
-                          </div>
-                        )}
+                        <Indicador asignado={asignaciones[k]} pendiente={yaPendiente} desasignando={desasignando} />
                       </div>
                     );
                   })
