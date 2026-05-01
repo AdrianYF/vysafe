@@ -20,6 +20,7 @@ export default function Contactos({ soloInvitar = false, onCerrar = null }) {
   const [generandoLink, setGenerandoLink] = useState(false);
   const [configAlertas, setConfigAlertas] = useState(null);
   const [asignaciones, setAsignaciones] = useState({});
+  const [invitacionesPendientes, setInvitacionesPendientes] = useState([]);
 
   const cargarContactos = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -64,10 +65,21 @@ export default function Contactos({ soloInvitar = false, onCerrar = null }) {
     setConfigAlertas(cfg);
   }, []);
 
+  const cargarInvitacionesPendientes = useCallback(async () => {
+    const { data: { user } } = await supabase.auth.getUser();
+    const { data } = await supabase
+      .from('invitaciones_mensaje')
+      .select('*')
+      .eq('invitador_id', user.id)
+      .eq('estado', 'pendiente');
+    setInvitacionesPendientes(data || []);
+  }, []);
+
   useEffect(() => {
     if (soloInvitar) return;
     cargarContactos();
     cargarConfig();
+    cargarInvitacionesPendientes();
 
     const setupRealtime = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -93,7 +105,7 @@ export default function Contactos({ soloInvitar = false, onCerrar = null }) {
     let channel;
     setupRealtime().then(ch => { channel = ch; });
     return () => { if (channel) supabase.removeChannel(channel); };
-  }, [soloInvitar, cargarContactos, cargarConfig]);
+  }, [soloInvitar, cargarContactos, cargarConfig, cargarInvitacionesPendientes]);
 
   useEffect(() => {
     if (soloInvitar) obtenerOGenerarLink();
@@ -127,14 +139,17 @@ export default function Contactos({ soloInvitar = false, onCerrar = null }) {
     setEditando(c);
     setApodo(c.nombre || '');
 
-    // Armar asignaciones actuales del contacto
     if (!configAlertas) return;
     const asig = {};
 
     ['verde', 'amarillo'].forEach(color => {
       configAlertas[color].mensajes.forEach((msg, i) => {
         const key = `${color}-${i}`;
-        asig[key] = !!(configAlertas[color].contactosPorMensaje[i] || {})[c.contacto_id];
+        const yaAceptado = !!(configAlertas[color].contactosPorMensaje[i] || {})[c.contacto_id];
+        const pendiente = invitacionesPendientes.some(
+          inv => inv.contacto_id === c.contacto_id && inv.color === color && inv.mensaje_index === i
+        );
+        asig[key] = yaAceptado || pendiente;
       });
     });
     asig['rojo'] = configAlertas.rojo.contactos.includes(c.contacto_id);
@@ -148,20 +163,33 @@ export default function Contactos({ soloInvitar = false, onCerrar = null }) {
     await supabase.from('contactos').update({ nombre: apodo }).eq('id', contactoId);
     setContactos(prev => prev.map(c => c.id === contactoId ? { ...c, nombre: apodo } : c));
 
-    // Guardar asignaciones
     const nuevaConfig = JSON.parse(JSON.stringify(configAlertas));
+    const nuevasInvitaciones = [];
 
-    ['verde', 'amarillo'].forEach(color => {
-      nuevaConfig[color].mensajes.forEach((msg, i) => {
+    // Para verde y amarillo: crear invitaciones para los nuevos
+    for (const color of ['verde', 'amarillo']) {
+      for (let i = 0; i < nuevaConfig[color].mensajes.length; i++) {
         const key = `${color}-${i}`;
-        if (asignaciones[key]) {
-          nuevaConfig[color].contactosPorMensaje[i][contactoUid] = true;
-        } else {
+        const yaAceptado = !!(configAlertas[color].contactosPorMensaje[i] || {})[contactoUid];
+        const yaPendiente = invitacionesPendientes.some(
+          inv => inv.contacto_id === contactoUid && inv.color === color && inv.mensaje_index === i
+        );
+
+        if (asignaciones[key] && !yaAceptado && !yaPendiente) {
+          // Es nuevo — crear invitación
+          nuevasInvitaciones.push({
+            color,
+            mensajeIndex: i,
+            mensajeTexto: nuevaConfig[color].mensajes[i],
+          });
+        } else if (!asignaciones[key] && yaAceptado) {
+          // Lo quitaron — remover de config
           delete nuevaConfig[color].contactosPorMensaje[i][contactoUid];
         }
-      });
-    });
+      }
+    }
 
+    // Para rojo: guardar directo (emergencia, no requiere invitación)
     if (asignaciones['rojo']) {
       if (!nuevaConfig.rojo.contactos.includes(contactoUid)) {
         nuevaConfig.rojo.contactos.push(contactoUid);
@@ -170,7 +198,7 @@ export default function Contactos({ soloInvitar = false, onCerrar = null }) {
       nuevaConfig.rojo.contactos = nuevaConfig.rojo.contactos.filter(id => id !== contactoUid);
     }
 
-    // Guardar en Supabase
+    // Guardar config en Supabase (solo rojo y los ya aceptados)
     await supabase.from('config_alertas').delete().eq('usuario_id', user.id);
 
     const rows = [];
@@ -195,7 +223,48 @@ export default function Contactos({ soloInvitar = false, onCerrar = null }) {
 
     await supabase.from('config_alertas').insert(rows);
     setConfigAlertas(nuevaConfig);
-    mostrarToast('✅ Cambios guardados');
+
+    // Crear invitaciones y mandar UNA sola push
+    if (nuevasInvitaciones.length > 0) {
+      for (const inv of nuevasInvitaciones) {
+        await supabase.from('invitaciones_mensaje').insert({
+          invitador_id: user.id,
+          contacto_id: contactoUid,
+          color: inv.color,
+          mensaje_index: inv.mensajeIndex,
+          mensaje_texto: inv.mensajeTexto,
+          estado: 'pendiente',
+        });
+      }
+
+      // Una sola push
+      const nombreInvitador = user.user_metadata?.full_name || user.user_metadata?.nombre || user.email;
+      await fetch('/api/enviar-alerta', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mensaje: `🔔 ${nombreInvitador} te invitó a ser parte de su red de mensajes`,
+          contactos: [contactoUid],
+          color: 'verde',
+          url: 'https://www.vysafe.com/notificaciones',
+          tipo: 'invitacion_red',
+        }),
+      });
+
+      setInvitacionesPendientes(prev => [...prev, ...nuevasInvitaciones.map(inv => ({
+        invitador_id: user.id,
+        contacto_id: contactoUid,
+        color: inv.color,
+        mensaje_index: inv.mensajeIndex,
+        mensaje_texto: inv.mensajeTexto,
+        estado: 'pendiente',
+      }))]);
+
+      mostrarToast(`✉️ Invitación enviada a ${apodo}`);
+    } else {
+      mostrarToast('✅ Cambios guardados');
+    }
+
     setEditando(null);
   }
 
@@ -282,10 +351,10 @@ export default function Contactos({ soloInvitar = false, onCerrar = null }) {
         </ul>
       )}
 
-      {/* Modal editar contacto */}
       {editando && (
         <div className="modal-overlay" onClick={() => setEditando(null)}>
-<div className="modal" onClick={e => e.stopPropagation()} style={{ maxHeight: '75vh', overflowY: 'auto', paddingBottom: 80 }}>            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxHeight: '75vh', overflowY: 'auto', paddingBottom: 80 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
               <div style={{ width: 52, height: 52, borderRadius: '50%', overflow: 'hidden', background: '#333', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, fontWeight: 700, color: '#fff', flexShrink: 0 }}>
                 {editando.avatar_url ? <img src={editando.avatar_url} alt={editando.nombre} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (editando.nombre || 'S').charAt(0).toUpperCase()}
               </div>
@@ -322,16 +391,27 @@ export default function Contactos({ soloInvitar = false, onCerrar = null }) {
                 ) : (
                   configAlertas[key].mensajes.map((msg, i) => {
                     const k = `${key}-${i}`;
+                    const yaAceptado = !!(configAlertas[key].contactosPorMensaje[i] || {})[editando?.contacto_id];
+                    const yaPendiente = invitacionesPendientes.some(
+                      inv => inv.contacto_id === editando?.contacto_id && inv.color === key && inv.mensaje_index === i
+                    );
                     return (
                       <div
                         key={i}
-                        onClick={() => setAsignaciones(prev => ({ ...prev, [k]: !prev[k] }))}
-                        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 10, background: asignaciones[k] ? '#1e3a2a' : '#252525', border: `1px solid ${asignaciones[k] ? bg : '#333'}`, cursor: 'pointer', marginBottom: 6 }}
+                        onClick={() => {
+                          if (yaAceptado || yaPendiente) return;
+                          setAsignaciones(prev => ({ ...prev, [k]: !prev[k] }));
+                        }}
+                        style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 10, background: yaAceptado ? '#1e3a2a' : yaPendiente ? '#2a2a1a' : asignaciones[k] ? '#1a2a3a' : '#252525', border: `1px solid ${yaAceptado ? bg : yaPendiente ? '#f39c12' : asignaciones[k] ? '#3498db' : '#333'}`, cursor: yaAceptado || yaPendiente ? 'default' : 'pointer', marginBottom: 6 }}
                       >
                         <span style={{ flex: 1, fontSize: 14, color: '#ccc' }}>{msg}</span>
-                        <div style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${asignaciones[k] ? bg : '#444'}`, background: asignaciones[k] ? bg : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#fff' }}>
-                          {asignaciones[k] && '✓'}
-                        </div>
+                        {yaPendiente && <span style={{ fontSize: 11, color: '#f39c12' }}>⏳</span>}
+                        {yaAceptado && <span style={{ fontSize: 11, color: bg }}>✅</span>}
+                        {!yaAceptado && !yaPendiente && (
+                          <div style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${asignaciones[k] ? '#3498db' : '#444'}`, background: asignaciones[k] ? '#3498db' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#fff' }}>
+                            {asignaciones[k] && '✓'}
+                          </div>
+                        )}
                       </div>
                     );
                   })
