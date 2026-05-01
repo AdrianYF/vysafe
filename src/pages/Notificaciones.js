@@ -42,59 +42,41 @@ export default function Notificaciones() {
   }, [cargarDatos]);
 
   async function responder(id, estado) {
-    await supabase
-      .from('invitaciones_mensaje')
-      .update({ estado })
-      .eq('id', id);
-
     const invitacion = pendientes.find(p => p.id === id);
-    if (invitacion) {
-      const emoji = estado === 'aceptado' ? '✅' : '❌';
-      const accion = estado === 'aceptado' ? 'aceptó' : 'rechazó';
+    if (!invitacion) return;
+
+    if (estado === 'aceptado') {
+      const { data: { user } } = await supabase.auth.getUser();
+
+      await fetch('/api/aceptar-invitacion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          invitacionId: id,
+          usuarioId: user.id,
+          invitadorId: invitacion.invitador_id,
+          color: invitacion.color,
+          mensajeIndex: invitacion.mensaje_index,
+          mensajeTexto: invitacion.mensaje_texto,
+        }),
+      });
+    } else {
+      // Rechazar
+      await supabase
+        .from('invitaciones_mensaje')
+        .update({ estado: 'rechazado' })
+        .eq('id', id);
+
       await fetch('/api/enviar-alerta', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          mensaje: `${emoji} Tu contacto ${accion} ser parte del mensaje "${invitacion.mensaje_texto}"`,
+          mensaje: `❌ Tu contacto rechazó ser parte del mensaje "${invitacion.mensaje_texto}"`,
           contactos: [invitacion.invitador_id],
           color: invitacion.color,
           tipo: 'respuesta_invitacion',
         }),
       });
-
-      if (estado === 'aceptado') {
-        const { data: { user } } = await supabase.auth.getUser();
-
-        const { data: existente } = await supabase
-          .from('config_alertas')
-          .select('*')
-          .eq('usuario_id', invitacion.invitador_id)
-          .eq('color', invitacion.color)
-          .eq('mensaje_index', invitacion.mensaje_index)
-          .maybeSingle();
-
-        if (existente) {
-          const contactosActuales = existente.contactos
-            ? existente.contactos.split(',').filter(Boolean)
-            : [];
-          if (!contactosActuales.includes(user.id)) {
-            contactosActuales.push(user.id);
-            await supabase
-              .from('config_alertas')
-              .update({ contactos: contactosActuales.join(',') })
-              .eq('id', existente.id);
-          }
-        } else {
-          // No existe la fila, crearla
-          await supabase.from('config_alertas').insert({
-            usuario_id: invitacion.invitador_id,
-            color: invitacion.color,
-            mensaje_index: invitacion.mensaje_index,
-            mensaje_texto: invitacion.mensaje_texto,
-            contactos: user.id,
-          });
-        }
-      }
     }
 
     setPendientes(prev => prev.filter(p => p.id !== id));
