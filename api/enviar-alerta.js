@@ -23,6 +23,8 @@ export default async function handler(req, res) {
     contents: { en: mensaje, es: mensaje },
     headings: { en: '🚨 VySafe', es: '🚨 VySafe' },
     android_sound: sonido,
+    android_group: `vysafe-${tipo || 'alerta'}`,
+    collapse_id: `vysafe-${Date.now()}`,
   };
 
   if (url) {
@@ -40,7 +42,6 @@ export default async function handler(req, res) {
 
   const data = await response.json();
 
-  // Guardar notificación en Supabase para cada destinatario
   try {
     const supabaseUrl = process.env.SUPABASE_URL;
     const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
