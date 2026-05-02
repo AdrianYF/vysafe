@@ -10,10 +10,12 @@ const defaultConfig = {
   verde: {
     mensajes: ['Llegué bien 😊', 'Ya se me pasó 💪', 'Ya se durmió 🙏'],
     contactosPorMensaje: [{}, {}, {}],
+    compartirUbicacion: [false, false, false],
   },
   amarillo: {
     mensajes: ['Saliendo, te aviso al llegar', 'Me siento maread@', 'Otra vez llegó borracho'],
     contactosPorMensaje: [{}, {}, {}],
+    compartirUbicacion: [true, true, true],
   },
   rojo: { contactos: [] },
 };
@@ -36,6 +38,7 @@ function Home() {
   const [contactos, setContactos] = useState([]);
   const [config, setConfig] = useState(defaultConfig);
   const [sinContactosAviso, setSinContactosAviso] = useState(false);
+  const [avisoUbicacion, setAvisoUbicacion] = useState(false);
   const redInterval = useRef(null);
   const msgTimer = useRef(null);
   const cerrarTimer = useRef(null);
@@ -44,14 +47,23 @@ function Home() {
 
   const armarConfig = useCallback((rows) => {
     const cfg = {
-      verde: { mensajes: [], contactosPorMensaje: [] },
-      amarillo: { mensajes: [], contactosPorMensaje: [] },
+      verde: { mensajes: [], contactosPorMensaje: [], compartirUbicacion: [] },
+      amarillo: { mensajes: [], contactosPorMensaje: [], compartirUbicacion: [] },
       rojo: { contactos: [] },
     };
 
     const tieneFilas = { verde: false, amarillo: false };
 
+    // Deduplicar por color+mensaje_index
+    const filasDedup = {};
     rows.forEach(row => {
+      const key = `${row.color}-${row.mensaje_index}`;
+      if (!filasDedup[key] || row.created_at > filasDedup[key].created_at) {
+        filasDedup[key] = row;
+      }
+    });
+
+    Object.values(filasDedup).forEach(row => {
       if (row.color === 'rojo') {
         cfg.rojo.contactos = row.contactos ? row.contactos.split(',').filter(Boolean) : [];
       } else if (cfg[row.color]) {
@@ -60,8 +72,10 @@ function Home() {
         while (cfg[row.color].mensajes.length <= i) {
           cfg[row.color].mensajes.push(null);
           cfg[row.color].contactosPorMensaje.push({});
+          cfg[row.color].compartirUbicacion.push(false);
         }
         cfg[row.color].mensajes[i] = row.mensaje_texto || null;
+        cfg[row.color].compartirUbicacion[i] = row.compartir_ubicacion ?? false;
         if (row.contactos) {
           cfg[row.color].contactosPorMensaje[i] = {};
           row.contactos.split(',').filter(Boolean).forEach(id => {
@@ -75,17 +89,21 @@ function Home() {
       if (!tieneFilas[color]) {
         cfg[color].mensajes = [...defaultConfig[color].mensajes];
         cfg[color].contactosPorMensaje = [{}, {}, {}];
+        cfg[color].compartirUbicacion = [...defaultConfig[color].compartirUbicacion];
       } else {
         const mensajesFiltrados = [];
         const contactosFiltrados = [];
+        const ubicacionFiltrada = [];
         cfg[color].mensajes.forEach((msg, i) => {
           if (msg !== null && msg !== '__borrado__') {
             mensajesFiltrados.push(msg);
             contactosFiltrados.push(cfg[color].contactosPorMensaje[i] || {});
+            ubicacionFiltrada.push(cfg[color].compartirUbicacion[i] ?? false);
           }
         });
         cfg[color].mensajes = mensajesFiltrados;
         cfg[color].contactosPorMensaje = contactosFiltrados;
+        cfg[color].compartirUbicacion = ubicacionFiltrada;
       }
     });
 
@@ -133,6 +151,25 @@ function Home() {
     cargarTodo();
   }, [cargarTodo, location]);
 
+  // Obtiene ubicación actual — devuelve {lat, lng} o null
+  async function obtenerUbicacion() {
+    if (!navigator.geolocation) return null;
+
+    await navigator.permissions?.query({ name: 'geolocation' }).catch(() => null);
+    return new Promise((resolve) => {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+        (err) => {
+          // Permiso denegado o error
+          setAvisoUbicacion(true);
+          setTimeout(() => setAvisoUbicacion(false), 6000);
+          resolve(null);
+        },
+        { timeout: 8000, maximumAge: 0 }
+      );
+    });
+  }
+
   async function enviarAlerta(mensaje, tipoAlerta, msgIdx) {
     try {
       let contactosDestino = [];
@@ -145,10 +182,36 @@ function Home() {
 
       if (contactosDestino.length === 0) return false;
 
+      // Determinar si hay que pedir ubicación
+      const debeCompartir = tipoAlerta === 'rojo' || (config[tipoAlerta]?.compartirUbicacion?.[msgIdx] ?? false);
+      let ubicacion = null;
+      if (debeCompartir) {
+        ubicacion = await obtenerUbicacion();
+      }
+
+      // Guardar alerta en historial
+      const { data: { user } } = await supabase.auth.getUser();
+      await supabase.from('alertas_enviadas').insert({
+        usuario_id: user.id,
+        mensaje,
+        color: tipoAlerta,
+        latitud: ubicacion?.lat ?? null,
+        longitud: ubicacion?.lng ?? null,
+      });
+
+      // Mandar push con ubicación si corresponde
+      const mensajeConUbicacion = ubicacion
+        ? `${mensaje} 📍 https://maps.google.com/?q=${ubicacion.lat},${ubicacion.lng}`
+        : mensaje;
+
       await fetch('/api/enviar-alerta', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ mensaje, contactos: contactosDestino, color: tipoAlerta }),
+        body: JSON.stringify({
+          mensaje: mensajeConUbicacion,
+          contactos: contactosDestino,
+          color: tipoAlerta,
+        }),
       });
 
       return true;
@@ -274,6 +337,23 @@ function Home() {
           boxShadow: '0 4px 20px rgba(231,76,60,0.4)'
         }}>
           ⚠️ No hay contactos asignados a este mensaje
+        </div>
+      )}
+
+      {avisoUbicacion && (
+        <div style={{
+          position: 'fixed', top: 20, left: '50%', transform: 'translateX(-50%)',
+          background: '#f39c12', borderRadius: 12, padding: '12px 20px',
+          fontSize: 13, color: '#fff', zIndex: 999, maxWidth: 320, textAlign: 'center',
+          boxShadow: '0 4px 20px rgba(243,156,18,0.4)'
+        }}>
+          ⚠️ Alerta enviada sin ubicación.{' '}
+          <span
+            onClick={() => window.open('chrome://settings/content/location', '_blank')}
+            style={{ textDecoration: 'underline', cursor: 'pointer', fontWeight: 600 }}
+          >
+            Activar ubicación
+          </span>
         </div>
       )}
 
