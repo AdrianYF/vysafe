@@ -8,6 +8,11 @@ const defaultMensajes = {
   amarillo: ['Saliendo, te aviso al llegar', 'Me siento maread@', 'Otra vez llegó borracho'],
 };
 
+const defaultUbicacion = {
+  verde: [false, false, false],
+  amarillo: [true, true, true],
+};
+
 function getInstrucciones(label) {
   return [
     '1. Abrí Configuración en tu teléfono',
@@ -25,6 +30,7 @@ export default function ConfigAlertas() {
   const [loading, setLoading] = useState(true);
   const [editando, setEditando] = useState(null);
   const [textoEdit, setTextoEdit] = useState('');
+  const [ubicacionEdit, setUbicacionEdit] = useState(false);
   const [deleteProgress, setDeleteProgress] = useState({});
   const [mostrarInstrucciones, setMostrarInstrucciones] = useState(null);
   const [bloqueandoAgregar, setBloqueandoAgregar] = useState({});
@@ -65,14 +71,23 @@ export default function ConfigAlertas() {
 
   function armarConfig(rows) {
     const cfg = {
-      verde: { mensajes: [], contactosPorMensaje: [] },
-      amarillo: { mensajes: [], contactosPorMensaje: [] },
+      verde: { mensajes: [], contactosPorMensaje: [], compartirUbicacion: [] },
+      amarillo: { mensajes: [], contactosPorMensaje: [], compartirUbicacion: [] },
       rojo: { contactos: [] },
     };
 
     const tieneFilas = { verde: false, amarillo: false };
 
+    // Deduplicar filas por color+mensaje_index, quedarse con la más reciente
+    const filasDedup = {};
     rows.forEach(row => {
+      const key = `${row.color}-${row.mensaje_index}`;
+      if (!filasDedup[key] || row.created_at > filasDedup[key].created_at) {
+        filasDedup[key] = row;
+      }
+    });
+
+    Object.values(filasDedup).forEach(row => {
       if (row.color === 'rojo') {
         cfg.rojo.contactos = row.contactos ? row.contactos.split(',').filter(Boolean) : [];
       } else if (cfg[row.color]) {
@@ -81,8 +96,10 @@ export default function ConfigAlertas() {
         while (cfg[row.color].mensajes.length <= i) {
           cfg[row.color].mensajes.push(null);
           cfg[row.color].contactosPorMensaje.push({});
+          cfg[row.color].compartirUbicacion.push(false);
         }
         cfg[row.color].mensajes[i] = row.mensaje_texto || null;
+        cfg[row.color].compartirUbicacion[i] = row.compartir_ubicacion ?? (defaultUbicacion[row.color]?.[i] ?? false);
         if (row.contactos) {
           cfg[row.color].contactosPorMensaje[i] = {};
           row.contactos.split(',').filter(Boolean).forEach(id => {
@@ -96,17 +113,21 @@ export default function ConfigAlertas() {
       if (!tieneFilas[color]) {
         cfg[color].mensajes = [...defaultMensajes[color]];
         cfg[color].contactosPorMensaje = [{}, {}, {}];
+        cfg[color].compartirUbicacion = [...defaultUbicacion[color]];
       } else {
         const mensajesFiltrados = [];
         const contactosFiltrados = [];
+        const ubicacionFiltrada = [];
         cfg[color].mensajes.forEach((msg, i) => {
           if (msg !== null) {
             mensajesFiltrados.push(msg);
             contactosFiltrados.push(cfg[color].contactosPorMensaje[i] || {});
+            ubicacionFiltrada.push(cfg[color].compartirUbicacion[i] ?? false);
           }
         });
         cfg[color].mensajes = mensajesFiltrados;
         cfg[color].contactosPorMensaje = contactosFiltrados;
+        cfg[color].compartirUbicacion = ubicacionFiltrada;
       }
     });
 
@@ -118,25 +139,54 @@ export default function ConfigAlertas() {
     setTimeout(() => setToast(null), 3000);
   }
 
+  // Guarda todo el color completo para evitar duplicados
+  async function guardarColorCompleto(user, color, nueva) {
+    await supabase.from('config_alertas')
+      .delete()
+      .eq('usuario_id', user.id)
+      .eq('color', color);
+
+    if (color === 'rojo') {
+      await supabase.from('config_alertas').insert({
+        usuario_id: user.id,
+        color: 'rojo',
+        mensaje_index: 0,
+        mensaje_texto: '',
+        contactos: nueva.rojo.contactos.join(','),
+        compartir_ubicacion: false,
+      });
+    } else {
+      if (nueva[color].mensajes.length > 0) {
+        const rows = nueva[color].mensajes.map((texto, i) => ({
+          usuario_id: user.id,
+          color,
+          mensaje_index: i,
+          mensaje_texto: texto,
+          contactos: Object.keys(nueva[color].contactosPorMensaje[i] || {}).join(','),
+          compartir_ubicacion: nueva[color].compartirUbicacion[i] ?? false,
+        }));
+        await supabase.from('config_alertas').insert(rows);
+      } else {
+        await supabase.from('config_alertas').insert({
+          usuario_id: user.id,
+          color,
+          mensaje_index: 0,
+          mensaje_texto: '__borrado__',
+          contactos: '',
+          compartir_ubicacion: false,
+        });
+      }
+    }
+  }
+
   async function guardarMensaje(color, index) {
     const { data: { user } } = await supabase.auth.getUser();
     const nueva = JSON.parse(JSON.stringify(config));
     nueva[color].mensajes[index] = textoEdit;
+    nueva[color].compartirUbicacion[index] = ubicacionEdit;
     setConfig(nueva);
 
-    await supabase.from('config_alertas')
-      .delete()
-      .eq('usuario_id', user.id)
-      .eq('color', color)
-      .eq('mensaje_index', index);
-
-    await supabase.from('config_alertas').insert({
-      usuario_id: user.id,
-      color,
-      mensaje_index: index,
-      mensaje_texto: textoEdit,
-      contactos: Object.keys(nueva[color].contactosPorMensaje[index] || {}).join(','),
-    });
+    await guardarColorCompleto(user, color, nueva);
 
     const invitacionesParaEsteMensaje = nuevasInvitaciones.filter(
       inv => inv.color === color && inv.mensajeIndex === index
@@ -222,23 +272,9 @@ export default function ConfigAlertas() {
     );
 
     if (rojoAceptado) {
-      // Desasignar
       const nueva = JSON.parse(JSON.stringify(config));
       nueva.rojo.contactos = nueva.rojo.contactos.filter(id => id !== contactoId);
-
-      await supabase.from('config_alertas')
-        .delete()
-        .eq('usuario_id', user.id)
-        .eq('color', 'rojo');
-
-      await supabase.from('config_alertas').insert({
-        usuario_id: user.id,
-        color: 'rojo',
-        mensaje_index: 0,
-        mensaje_texto: '',
-        contactos: nueva.rojo.contactos.join(','),
-      });
-
+      await guardarColorCompleto(user, 'rojo', nueva);
       setConfig(nueva);
       mostrarToast('Contacto removido de alerta roja');
       return;
@@ -249,7 +285,6 @@ export default function ConfigAlertas() {
       return;
     }
 
-    // Mandar invitación
     await supabase.from('invitaciones_mensaje').insert({
       invitador_id: user.id,
       contacto_id: contactoId,
@@ -329,44 +364,15 @@ export default function ConfigAlertas() {
     const nueva = JSON.parse(JSON.stringify(config));
     nueva[color].mensajes.splice(index, 1);
     nueva[color].contactosPorMensaje.splice(index, 1);
+    nueva[color].compartirUbicacion.splice(index, 1);
 
-    await supabase.from('config_alertas')
-      .delete()
-      .eq('usuario_id', user.id)
-      .eq('color', color);
-
-    if (nueva[color].mensajes.length > 0) {
-      const rows = nueva[color].mensajes.map((texto, i) => ({
-        usuario_id: user.id,
-        color,
-        mensaje_index: i,
-        mensaje_texto: texto,
-        contactos: Object.keys(nueva[color].contactosPorMensaje[i] || {}).join(','),
-      }));
-      await supabase.from('config_alertas').insert(rows);
-    } else {
-      await supabase.from('config_alertas').insert({
-        usuario_id: user.id,
-        color,
-        mensaje_index: 0,
-        mensaje_texto: '__borrado__',
-        contactos: '',
-      });
-    }
-
+    await guardarColorCompleto(user, color, nueva);
     setConfig(nueva);
+
     setBloqueandoAgregar(prev => ({ ...prev, [color]: true }));
     setTimeout(() => {
       setBloqueandoAgregar(prev => ({ ...prev, [color]: false }));
     }, 800);
-  }
-
-  function descargarRingtone(key, label) {
-    const a = document.createElement('a');
-    a.href = `/VySafe-${label}.wav`;
-    a.download = `VySafe-${label}.wav`;
-    a.click();
-    setMostrarInstrucciones(label);
   }
 
   const colores = [
@@ -428,6 +434,20 @@ export default function ConfigAlertas() {
               onChange={e => setTextoEdit(e.target.value)}
               autoFocus
             />
+
+            <div
+              onClick={() => setUbicacionEdit(prev => !prev)}
+              style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 10, background: ubicacionEdit ? '#1a2a1a' : '#252525', border: `1px solid ${ubicacionEdit ? '#2ecc71' : '#333'}`, cursor: 'pointer', marginBottom: 16 }}
+            >
+              <span style={{ fontSize: 18 }}>📍</span>
+              <div style={{ flex: 1 }}>
+                <p style={{ margin: 0, fontSize: 14, color: '#fff' }}>Compartir ubicación</p>
+                <p style={{ margin: 0, fontSize: 11, color: '#888' }}>{ubicacionEdit ? 'Se enviará tu ubicación con este mensaje' : 'No se comparte ubicación'}</p>
+              </div>
+              <div style={{ width: 36, height: 20, borderRadius: 10, background: ubicacionEdit ? '#2ecc71' : '#444', position: 'relative', transition: 'background 0.2s', flexShrink: 0 }}>
+                <div style={{ width: 16, height: 16, borderRadius: '50%', background: '#fff', position: 'absolute', top: 2, left: ubicacionEdit ? 18 : 2, transition: 'left 0.2s' }} />
+              </div>
+            </div>
 
             <p style={{ fontSize: 11, color: '#888', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 }}>
               Contactos para este mensaje
@@ -522,15 +542,11 @@ export default function ConfigAlertas() {
           {seccionAbierta === key && (
             <div style={{ background: '#111', padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
 
-              <button
-                onClick={() => descargarRingtone(key, label)}
-                style={{ padding: '10px 14px', borderRadius: 12, border: `1px solid ${bg}`, background: 'transparent', color: bg, fontSize: 14, fontWeight: 600, cursor: 'pointer', textAlign: 'center' }}
-              >
-                🔔 Descargar ringtone {label}
-              </button>
-
               {key === 'rojo' ? (
                 <>
+                  <div style={{ padding: '10px 14px', borderRadius: 12, background: '#1a1a1a', border: '1px solid #2a2a2a' }}>
+                    <p style={{ margin: 0, fontSize: 13, color: '#888' }}>📍 Ubicación siempre activa en alertas de emergencia</p>
+                  </div>
                   <p style={{ fontSize: 12, color: '#888', textTransform: 'uppercase', letterSpacing: 1 }}>
                     Contactos de emergencia
                   </p>
@@ -587,13 +603,20 @@ export default function ConfigAlertas() {
                   {config[key].mensajes.map((msg, i) => {
                     const deleteKey = `${key}-${i}`;
                     const progress = deleteProgress[deleteKey] || 0;
+                    const compartiendo = config[key].compartirUbicacion[i] || false;
                     return (
                       <div key={i} style={{ position: 'relative', borderRadius: 12, overflow: 'hidden', background: '#1a1a1a', border: '1px solid #2a2a2a' }}>
                         <div style={{ position: 'absolute', top: 0, left: 0, height: '100%', width: `${progress}%`, background: '#e74c3c', opacity: 0.3, transition: 'width 0.1s linear', pointerEvents: 'none' }} />
                         <div style={{ position: 'relative', display: 'flex', alignItems: 'center', padding: '12px 14px', gap: 10 }}>
+                          <span style={{ fontSize: 16, opacity: compartiendo ? 1 : 0.25 }}>📍</span>
                           <span style={{ flex: 1, fontSize: 14, color: '#ccc' }}>{msg}</span>
                           <button
-                            onClick={() => { setEditando({ color: key, index: i }); setTextoEdit(msg); setNuevasInvitaciones([]); }}
+                            onClick={() => {
+                              setEditando({ color: key, index: i });
+                              setTextoEdit(msg);
+                              setUbicacionEdit(config[key].compartirUbicacion[i] ?? (key === 'amarillo'));
+                              setNuevasInvitaciones([]);
+                            }}
                             style={{ background: 'transparent', border: 'none', color: '#888', fontSize: 18, cursor: 'pointer', padding: '4px 6px' }}
                           >✏️</button>
                           <button
@@ -616,6 +639,7 @@ export default function ConfigAlertas() {
                       const nueva = JSON.parse(JSON.stringify(config));
                       nueva[key].mensajes.push('Nuevo mensaje');
                       nueva[key].contactosPorMensaje.push({});
+                      nueva[key].compartirUbicacion.push(key === 'amarillo');
                       setConfig(nueva);
                     }}
                     style={{ padding: '10px', borderRadius: 10, border: '1px dashed #333', background: 'transparent', color: bloqueandoAgregar[key] ? '#333' : '#888', fontSize: 14, cursor: bloqueandoAgregar[key] ? 'default' : 'pointer', textAlign: 'center' }}
