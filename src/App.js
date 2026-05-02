@@ -9,7 +9,10 @@ import Historial from './pages/Historial';
 import Notificaciones from './pages/Notificaciones';
 import Unirse from './pages/Unirse';
 import ConfigAlertas from './pages/ConfigAlertas';
+import Admin from './pages/Admin';
 import './App.css';
+
+const ADMIN_EMAIL = 'vilasadrian@gmail.com';
 
 function App() {
   const [session, setSession] = useState(null);
@@ -27,6 +30,8 @@ function App() {
 
   if (loading) return <div>Cargando...</div>;
 
+  const esAdmin = session?.user?.email === ADMIN_EMAIL;
+
   return (
     <Router>
       <div className="App">
@@ -39,6 +44,7 @@ function App() {
           <Route path="/notificaciones" element={session ? <Notificaciones /> : <Navigate to="/" />} />
           <Route path="/config-alertas" element={session ? <ConfigAlertas /> : <Navigate to="/" />} />
           <Route path="/unirse/:token" element={<Unirse />} />
+          <Route path="/admin" element={esAdmin ? <Admin /> : <Navigate to="/" />} />
         </Routes>
       </div>
     </Router>
