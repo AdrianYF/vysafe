@@ -22,53 +22,103 @@ export default async function handler(req, res) {
       body: JSON.stringify({ estado: 'aceptado' }),
     });
 
-    // 2. Buscar fila en config_alertas del invitador
-    const buscarRes = await fetch(
-      `${supabaseUrl}/rest/v1/config_alertas?usuario_id=eq.${invitadorId}&color=eq.${color}&mensaje_index=eq.${mensajeIndex}`,
-      { method: 'GET', headers }
-    );
-    const filas = await buscarRes.json();
+    if (color === 'rojo') {
+      // Para rojo: agregar a la lista de contactos de emergencia
+      const buscarRes = await fetch(
+        `${supabaseUrl}/rest/v1/config_alertas?usuario_id=eq.${invitadorId}&color=eq.rojo`,
+        { method: 'GET', headers }
+      );
+      const filas = await buscarRes.json();
 
-    if (filas && filas.length > 0) {
-      const existente = filas[0];
-      const contactosActuales = existente.contactos
-        ? existente.contactos.split(',').filter(Boolean)
-        : [];
+      if (filas && filas.length > 0) {
+        const existente = filas[0];
+        const contactosActuales = existente.contactos
+          ? existente.contactos.split(',').filter(Boolean)
+          : [];
 
-      if (!contactosActuales.includes(usuarioId)) {
-        contactosActuales.push(usuarioId);
-        await fetch(`${supabaseUrl}/rest/v1/config_alertas?id=eq.${existente.id}`, {
-          method: 'PATCH',
+        if (!contactosActuales.includes(usuarioId)) {
+          contactosActuales.push(usuarioId);
+          await fetch(`${supabaseUrl}/rest/v1/config_alertas?id=eq.${existente.id}`, {
+            method: 'PATCH',
+            headers: { ...headers, 'Prefer': 'return=minimal' },
+            body: JSON.stringify({ contactos: contactosActuales.join(',') }),
+          });
+        }
+      } else {
+        // Crear fila roja nueva
+        await fetch(`${supabaseUrl}/rest/v1/config_alertas`, {
+          method: 'POST',
           headers: { ...headers, 'Prefer': 'return=minimal' },
-          body: JSON.stringify({ contactos: contactosActuales.join(',') }),
+          body: JSON.stringify({
+            usuario_id: invitadorId,
+            color: 'rojo',
+            mensaje_index: 0,
+            mensaje_texto: '',
+            contactos: usuarioId,
+          }),
         });
       }
-    } else {
-      // Crear fila nueva
-      await fetch(`${supabaseUrl}/rest/v1/config_alertas`, {
+
+      // Notificar al invitador
+      await fetch(`${req.headers.origin || 'https://www.vysafe.com'}/api/enviar-alerta`, {
         method: 'POST',
-        headers: { ...headers, 'Prefer': 'return=minimal' },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          usuario_id: invitadorId,
+          mensaje: `✅ Tu contacto aceptó ser tu contacto de emergencia 🚨`,
+          contactos: [invitadorId],
+          color: 'rojo',
+          tipo: 'respuesta_invitacion',
+        }),
+      });
+
+    } else {
+      // Verde y amarillo: agregar al mensaje específico
+      const buscarRes = await fetch(
+        `${supabaseUrl}/rest/v1/config_alertas?usuario_id=eq.${invitadorId}&color=eq.${color}&mensaje_index=eq.${mensajeIndex}`,
+        { method: 'GET', headers }
+      );
+      const filas = await buscarRes.json();
+
+      if (filas && filas.length > 0) {
+        const existente = filas[0];
+        const contactosActuales = existente.contactos
+          ? existente.contactos.split(',').filter(Boolean)
+          : [];
+
+        if (!contactosActuales.includes(usuarioId)) {
+          contactosActuales.push(usuarioId);
+          await fetch(`${supabaseUrl}/rest/v1/config_alertas?id=eq.${existente.id}`, {
+            method: 'PATCH',
+            headers: { ...headers, 'Prefer': 'return=minimal' },
+            body: JSON.stringify({ contactos: contactosActuales.join(',') }),
+          });
+        }
+      } else {
+        await fetch(`${supabaseUrl}/rest/v1/config_alertas`, {
+          method: 'POST',
+          headers: { ...headers, 'Prefer': 'return=minimal' },
+          body: JSON.stringify({
+            usuario_id: invitadorId,
+            color,
+            mensaje_index: mensajeIndex,
+            mensaje_texto: mensajeTexto,
+            contactos: usuarioId,
+          }),
+        });
+      }
+
+      // Notificar al invitador
+      await fetch(`${req.headers.origin || 'https://www.vysafe.com'}/api/enviar-alerta`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          mensaje: `✅ Tu contacto aceptó ser parte del mensaje "${mensajeTexto}"`,
+          contactos: [invitadorId],
           color,
-          mensaje_index: mensajeIndex,
-          mensaje_texto: mensajeTexto,
-          contactos: usuarioId,
+          tipo: 'respuesta_invitacion',
         }),
       });
     }
-
-    // 3. Notificar al invitador
-    await fetch(`${req.headers.origin || 'https://www.vysafe.com'}/api/enviar-alerta`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        mensaje: `✅ Tu contacto aceptó ser parte del mensaje "${mensajeTexto}"`,
-        contactos: [invitadorId],
-        color,
-        tipo: 'respuesta_invitacion',
-      }),
-    });
 
     return res.status(200).json({ ok: true });
   } catch (e) {

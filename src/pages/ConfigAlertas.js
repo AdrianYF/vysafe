@@ -216,29 +216,72 @@ export default function ConfigAlertas() {
 
   async function toggleContactoRojo(contactoId) {
     const { data: { user } } = await supabase.auth.getUser();
-    const nueva = JSON.parse(JSON.stringify(config));
-    const lista = nueva.rojo.contactos;
+    const rojoAceptado = config.rojo.contactos.includes(contactoId);
+    const rojoPendiente = invitacionesPendientes.some(
+      inv => inv.contacto_id === contactoId && inv.color === 'rojo'
+    );
 
-    if (lista.includes(contactoId)) {
-      nueva.rojo.contactos = lista.filter(id => id !== contactoId);
-    } else {
-      nueva.rojo.contactos = [...lista, contactoId];
+    if (rojoAceptado) {
+      // Desasignar
+      const nueva = JSON.parse(JSON.stringify(config));
+      nueva.rojo.contactos = nueva.rojo.contactos.filter(id => id !== contactoId);
+
+      await supabase.from('config_alertas')
+        .delete()
+        .eq('usuario_id', user.id)
+        .eq('color', 'rojo');
+
+      await supabase.from('config_alertas').insert({
+        usuario_id: user.id,
+        color: 'rojo',
+        mensaje_index: 0,
+        mensaje_texto: '',
+        contactos: nueva.rojo.contactos.join(','),
+      });
+
+      setConfig(nueva);
+      mostrarToast('Contacto removido de alerta roja');
+      return;
     }
 
-    await supabase.from('config_alertas')
-      .delete()
-      .eq('usuario_id', user.id)
-      .eq('color', 'rojo');
+    if (rojoPendiente) {
+      mostrarToast('Ya enviaste una invitación a este contacto');
+      return;
+    }
 
-    await supabase.from('config_alertas').insert({
-      usuario_id: user.id,
+    // Mandar invitación
+    await supabase.from('invitaciones_mensaje').insert({
+      invitador_id: user.id,
+      contacto_id: contactoId,
       color: 'rojo',
       mensaje_index: 0,
-      mensaje_texto: '',
-      contactos: nueva.rojo.contactos.join(','),
+      mensaje_texto: '🚨 Alerta de emergencia',
+      estado: 'pendiente',
     });
 
-    setConfig(nueva);
+    const nombre = user.user_metadata?.full_name || user.user_metadata?.nombre || user.email;
+    await fetch('/api/enviar-alerta', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        mensaje: `🔔 ${nombre} te invitó a ser su contacto de emergencia`,
+        contactos: [contactoId],
+        color: 'rojo',
+        url: 'https://www.vysafe.com/notificaciones',
+        tipo: 'invitacion_red',
+      }),
+    });
+
+    setInvitacionesPendientes(prev => [...prev, {
+      invitador_id: user.id,
+      contacto_id: contactoId,
+      color: 'rojo',
+      mensaje_index: 0,
+      mensaje_texto: '🚨 Alerta de emergencia',
+      estado: 'pendiente',
+    }]);
+
+    mostrarToast('✉️ Invitación de emergencia enviada');
   }
 
   async function retirarInvitacion(contactoId, color, mensajeIndex) {
@@ -410,7 +453,7 @@ export default function ConfigAlertas() {
 
                   let bgColor = '#252525';
                   let borderColor = '#333';
-                  if (seleccionado) { bgColor = '#1e3a2a'; borderColor = bg; }
+                  if (seleccionado) { bgColor = '#1e3a2a'; borderColor = '#2ecc71'; }
                   else if (pendiente) { bgColor = '#2a2a1a'; borderColor = '#f39c12'; }
                   else if (nuevaInv) { bgColor = '#1a2a3a'; borderColor = '#3498db'; }
 
@@ -430,7 +473,7 @@ export default function ConfigAlertas() {
                         <span style={{ fontSize: 14 }}>{c.nombre || 'Sin nombre'}</span>
                         {pendiente && <p style={{ fontSize: 11, color: '#f39c12', margin: 0 }}>⏳ Pendiente de respuesta</p>}
                         {nuevaInv && <p style={{ fontSize: 11, color: '#3498db', margin: 0 }}>📨 Se enviará al guardar</p>}
-                        {seleccionado && <p style={{ fontSize: 11, color: bg, margin: 0 }}>✅ Aceptado</p>}
+                        {seleccionado && <p style={{ fontSize: 11, color: '#2ecc71', margin: 0 }}>✅ Aceptado</p>}
                       </div>
                       {pendiente && (
                         <button
@@ -489,18 +532,26 @@ export default function ConfigAlertas() {
               {key === 'rojo' ? (
                 <>
                   <p style={{ fontSize: 12, color: '#888', textTransform: 'uppercase', letterSpacing: 1 }}>
-                    Contactos que reciben esta alerta
+                    Contactos de emergencia
                   </p>
                   {contactos.length === 0 ? (
                     <p style={{ color: '#555', fontSize: 13 }}>Todavía no tenés contactos. ¡Invitá a alguien!</p>
                   ) : (
                     contactos.map(c => {
-                      const seleccionado = config.rojo.contactos.includes(c.contacto_id);
+                      const aceptado = config.rojo.contactos.includes(c.contacto_id);
+                      const pendiente = invitacionesPendientes.some(
+                        inv => inv.contacto_id === c.contacto_id && inv.color === 'rojo'
+                      );
                       return (
                         <div
                           key={c.id}
                           onClick={() => toggleContactoRojo(c.contacto_id)}
-                          style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 10, background: seleccionado ? '#1e3a2a' : '#1a1a1a', border: `1px solid ${seleccionado ? '#2ecc71' : '#2a2a2a'}`, cursor: 'pointer', userSelect: 'none' }}
+                          style={{
+                            display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 10,
+                            background: aceptado ? '#1e3a2a' : pendiente ? '#2a2a1a' : '#1a1a1a',
+                            border: `1px solid ${aceptado ? '#2ecc71' : pendiente ? '#f39c12' : '#2a2a2a'}`,
+                            cursor: pendiente ? 'default' : 'pointer', userSelect: 'none'
+                          }}
                         >
                           <div style={{ width: 36, height: 36, borderRadius: '50%', background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 14, overflow: 'hidden', flexShrink: 0 }}>
                             {c.avatar_url
@@ -508,10 +559,24 @@ export default function ConfigAlertas() {
                               : (c.nombre || 'S').charAt(0).toUpperCase()
                             }
                           </div>
-                          <span style={{ fontSize: 14 }}>{c.nombre || 'Sin nombre'}</span>
-                          <div style={{ marginLeft: 'auto', width: 20, height: 20, borderRadius: '50%', border: `2px solid ${seleccionado ? '#2ecc71' : '#444'}`, background: seleccionado ? '#2ecc71' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#fff' }}>
-                            {seleccionado && '✓'}
+                          <div style={{ flex: 1 }}>
+                            <span style={{ fontSize: 14 }}>{c.nombre || 'Sin nombre'}</span>
+                            {pendiente && <p style={{ fontSize: 11, color: '#f39c12', margin: 0 }}>⏳ Pendiente de respuesta</p>}
+                            {aceptado && <p style={{ fontSize: 11, color: '#2ecc71', margin: 0 }}>✅ Aceptado</p>}
                           </div>
+                          {pendiente && (
+                            <button
+                              onClick={e => { e.stopPropagation(); retirarInvitacion(c.contacto_id, 'rojo', 0); }}
+                              style={{ background: 'transparent', border: '1px solid #e74c3c', borderRadius: 8, color: '#e74c3c', fontSize: 11, padding: '4px 8px', cursor: 'pointer', flexShrink: 0 }}
+                            >
+                              Retirar
+                            </button>
+                          )}
+                          {!pendiente && (
+                            <div style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${aceptado ? '#2ecc71' : '#444'}`, background: aceptado ? '#2ecc71' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#fff' }}>
+                              {aceptado && '✓'}
+                            </div>
+                          )}
                         </div>
                       );
                     })

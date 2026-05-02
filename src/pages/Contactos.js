@@ -160,7 +160,14 @@ export default function Contactos({ soloInvitar = false, onCerrar = null }) {
         asig[key] = yaAceptado || pendiente;
       });
     });
-    asig['rojo'] = configAlertas.rojo.contactos.includes(c.contacto_id);
+
+    // Rojo: aceptado o pendiente
+    const rojoAceptado = configAlertas.rojo.contactos.includes(c.contacto_id);
+    const rojoPendiente = invitacionesPendientes.some(
+      inv => inv.contacto_id === c.contacto_id && inv.color === 'rojo'
+    );
+    asig['rojo'] = rojoAceptado || rojoPendiente;
+
     setAsignaciones(asig);
   }
 
@@ -173,6 +180,7 @@ export default function Contactos({ soloInvitar = false, onCerrar = null }) {
     const nuevaConfig = JSON.parse(JSON.stringify(configAlertas));
     const nuevasInvitaciones = [];
 
+    // Verde y amarillo
     for (const color of ['verde', 'amarillo']) {
       for (let i = 0; i < nuevaConfig[color].mensajes.length; i++) {
         const key = `${color}-${i}`;
@@ -193,14 +201,25 @@ export default function Contactos({ soloInvitar = false, onCerrar = null }) {
       }
     }
 
-    if (asignaciones['rojo']) {
-      if (!nuevaConfig.rojo.contactos.includes(contactoUid)) {
-        nuevaConfig.rojo.contactos.push(contactoUid);
-      }
-    } else {
+    // Rojo: ahora también usa invitación
+    const rojoAceptado = configAlertas.rojo.contactos.includes(contactoUid);
+    const rojoPendiente = invitacionesPendientes.some(
+      inv => inv.contacto_id === contactoUid && inv.color === 'rojo'
+    );
+
+    if (asignaciones['rojo'] && !rojoAceptado && !rojoPendiente) {
+      // Nueva invitación rojo
+      nuevasInvitaciones.push({
+        color: 'rojo',
+        mensajeIndex: 0,
+        mensajeTexto: '🚨 Alerta de emergencia',
+      });
+    } else if (!asignaciones['rojo'] && rojoAceptado) {
+      // Desasignar rojo aceptado
       nuevaConfig.rojo.contactos = nuevaConfig.rojo.contactos.filter(id => id !== contactoUid);
     }
 
+    // Guardar config en Supabase (solo verde, amarillo y rojo aceptados)
     await supabase.from('config_alertas').delete().eq('usuario_id', user.id);
 
     const rows = [];
@@ -226,6 +245,7 @@ export default function Contactos({ soloInvitar = false, onCerrar = null }) {
     await supabase.from('config_alertas').insert(rows);
     setConfigAlertas(nuevaConfig);
 
+    // Mandar invitaciones
     if (nuevasInvitaciones.length > 0) {
       for (const inv of nuevasInvitaciones) {
         await supabase.from('invitaciones_mensaje').insert({
@@ -390,17 +410,30 @@ export default function Contactos({ soloInvitar = false, onCerrar = null }) {
             {configAlertas && colores.map(({ key, label, emoji, bg }) => (
               <div key={key} style={{ marginBottom: 12 }}>
                 <p style={{ margin: '0 0 8px', fontSize: 13, color: '#aaa' }}>{emoji} {label}</p>
-                {key === 'rojo' ? (
-                  <div
-                    onClick={() => setAsignaciones(prev => ({ ...prev, rojo: !prev.rojo }))}
-                    style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 10, background: asignaciones['rojo'] ? '#1e3a2a' : '#252525', border: `1px solid ${asignaciones['rojo'] ? '#2ecc71' : '#333'}`, cursor: 'pointer' }}
-                  >
-                    <span style={{ flex: 1, fontSize: 14, color: '#ccc' }}>🚨 Alerta de emergencia</span>
-                    <div style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${asignaciones['rojo'] ? '#2ecc71' : '#444'}`, background: asignaciones['rojo'] ? '#2ecc71' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#fff' }}>
-                      {asignaciones['rojo'] && '✓'}
+                {key === 'rojo' ? (() => {
+                  const rojoAceptado = configAlertas.rojo.contactos.includes(editando?.contacto_id);
+                  const rojoPendiente = invitacionesPendientes.some(
+                    inv => inv.contacto_id === editando?.contacto_id && inv.color === 'rojo'
+                  );
+                  const desasignando = rojoAceptado && !asignaciones['rojo'];
+                  return (
+                    <div
+                      onClick={() => {
+                        if (rojoPendiente) return;
+                        setAsignaciones(prev => ({ ...prev, rojo: !prev.rojo }));
+                      }}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 10,
+                        background: desasignando ? '#2a1a1a' : asignaciones['rojo'] ? '#1e3a2a' : rojoPendiente ? '#2a2a1a' : '#252525',
+                        border: `1px solid ${desasignando ? '#e74c3c' : asignaciones['rojo'] ? '#2ecc71' : rojoPendiente ? '#f39c12' : '#333'}`,
+                        cursor: rojoPendiente ? 'default' : 'pointer'
+                      }}
+                    >
+                      <span style={{ flex: 1, fontSize: 14, color: '#ccc' }}>🚨 Alerta de emergencia</span>
+                      <Indicador asignado={asignaciones['rojo']} pendiente={rojoPendiente} desasignando={desasignando} />
                     </div>
-                  </div>
-                ) : (
+                  );
+                })() : (
                   configAlertas[key].mensajes.map((msg, i) => {
                     const k = `${key}-${i}`;
                     const yaAceptado = !!(configAlertas[key].contactosPorMensaje[i] || {})[editando?.contacto_id];
