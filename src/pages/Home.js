@@ -165,7 +165,7 @@ function Home() {
           setTimeout(() => setAvisoUbicacion(false), 6000);
           resolve(null);
         },
-        { timeout: 8000, maximumAge: 0 }
+        { timeout: 15000, maximumAge: 0, enableHighAccuracy: true }
       );
     });
   }
