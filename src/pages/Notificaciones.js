@@ -6,6 +6,7 @@ export default function Notificaciones() {
   const [pendientes, setPendientes] = useState([]);
   const [historial, setHistorial] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [modalUbicacion, setModalUbicacion] = useState(null); // { lat, lng }
 
   const cargarDatos = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -47,7 +48,6 @@ export default function Notificaciones() {
 
     if (estado === 'aceptado') {
       const { data: { user } } = await supabase.auth.getUser();
-
       await fetch('/api/aceptar-invitacion', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -61,7 +61,6 @@ export default function Notificaciones() {
         }),
       });
     } else {
-      // Rechazar
       await supabase
         .from('invitaciones_mensaje')
         .update({ estado: 'rechazado' })
@@ -97,6 +96,35 @@ export default function Notificaciones() {
     return fecha.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' });
   }
 
+  // Extrae coordenadas del mensaje si tiene link de maps
+  function extraerUbicacion(mensaje) {
+    const match = mensaje.match(/https:\/\/maps\.google\.com\/\?q=([-\d.]+),([-\d.]+)/);
+    if (match) {
+      return { lat: match[1], lng: match[2] };
+    }
+    return null;
+  }
+
+  // Devuelve el mensaje sin el link de maps
+  function limpiarMensaje(mensaje) {
+    return mensaje.replace(/\s*📍\s*https:\/\/maps\.google\.com\/\?q=[-\d.,]+/g, '').trim();
+  }
+
+  function abrirEnGoogleMaps(lat, lng) {
+    window.open(`https://www.google.com/maps?q=${lat},${lng}`, '_blank');
+    setModalUbicacion(null);
+  }
+
+  function abrirEnWaze(lat, lng) {
+    window.open(`https://waze.com/ul?ll=${lat},${lng}&navigate=yes`, '_blank');
+    setModalUbicacion(null);
+  }
+
+  function abrirEnNavegador(lat, lng) {
+    window.open(`https://maps.google.com/?q=${lat},${lng}`, '_blank');
+    setModalUbicacion(null);
+  }
+
   const colores = {
     verde: '#2ecc71',
     amarillo: '#f39c12',
@@ -115,6 +143,48 @@ export default function Notificaciones() {
       <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '20px 20px 10px', borderBottom: '1px solid #1a1a1a' }}>
         <span style={{ fontSize: 18, fontWeight: 600 }}>🔔 Alertas</span>
       </div>
+
+      {/* Modal de ubicación */}
+      {modalUbicacion && (
+        <div
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}
+          onClick={() => setModalUbicacion(null)}
+        >
+          <div
+            style={{ background: '#1a1a1a', border: '1px solid #2a2a2a', borderRadius: 20, padding: 24, width: '100%', maxWidth: 320 }}
+            onClick={e => e.stopPropagation()}
+          >
+            <p style={{ fontSize: 16, fontWeight: 600, marginBottom: 6, textAlign: 'center' }}>📍 Ver ubicación</p>
+            <p style={{ fontSize: 13, color: '#888', marginBottom: 20, textAlign: 'center' }}>¿Con qué app querés abrir la ubicación?</p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <button
+                onClick={() => abrirEnGoogleMaps(modalUbicacion.lat, modalUbicacion.lng)}
+                style={{ padding: 12, borderRadius: 12, border: 'none', background: '#4285F4', color: '#fff', fontSize: 15, fontWeight: 600, cursor: 'pointer' }}
+              >
+                🗺️ Google Maps
+              </button>
+              <button
+                onClick={() => abrirEnWaze(modalUbicacion.lat, modalUbicacion.lng)}
+                style={{ padding: 12, borderRadius: 12, border: 'none', background: '#33CCFF', color: '#fff', fontSize: 15, fontWeight: 600, cursor: 'pointer' }}
+              >
+                🚗 Waze
+              </button>
+              <button
+                onClick={() => abrirEnNavegador(modalUbicacion.lat, modalUbicacion.lng)}
+                style={{ padding: 12, borderRadius: 12, border: '1px solid #333', background: 'transparent', color: '#888', fontSize: 14, cursor: 'pointer' }}
+              >
+                Abrir en el navegador
+              </button>
+              <button
+                onClick={() => setModalUbicacion(null)}
+                style={{ padding: 10, borderRadius: 12, border: '1px solid #333', background: 'transparent', color: '#555', fontSize: 13, cursor: 'pointer' }}
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {pendientes.length > 0 && (
         <div style={{ padding: '16px 16px 0' }}>
@@ -168,11 +238,21 @@ export default function Notificaciones() {
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {historial.map(notif => {
               const color = colores[notif.color] || '#888';
+              const ubicacion = extraerUbicacion(notif.mensaje);
+              const mensajeLimpio = limpiarMensaje(notif.mensaje);
               return (
                 <div key={notif.id} style={{ background: notif.leida ? '#111' : '#1a1a1a', border: `1px solid ${notif.leida ? '#1a1a1a' : color}`, borderRadius: 12, padding: '12px 16px', display: 'flex', alignItems: 'flex-start', gap: 12 }}>
                   <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, marginTop: 6, flexShrink: 0 }} />
                   <div style={{ flex: 1 }}>
-                    <p style={{ fontSize: 14, color: notif.leida ? '#888' : '#fff', margin: 0 }}>{notif.mensaje}</p>
+                    <p style={{ fontSize: 14, color: notif.leida ? '#888' : '#fff', margin: 0 }}>{mensajeLimpio}</p>
+                    {ubicacion && (
+                      <button
+                        onClick={() => setModalUbicacion(ubicacion)}
+                        style={{ marginTop: 6, padding: '4px 10px', borderRadius: 8, border: `1px solid ${color}`, background: 'transparent', color: color, fontSize: 12, cursor: 'pointer', fontWeight: 600 }}
+                      >
+                        📍 Ver ubicación
+                      </button>
+                    )}
                     <p style={{ fontSize: 11, color: '#555', margin: '4px 0 0' }}>{formatFecha(notif.created_at)}</p>
                   </div>
                 </div>
