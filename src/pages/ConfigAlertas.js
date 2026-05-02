@@ -4,8 +4,8 @@ import { supabase } from '../supabase';
 import NavBar from '../components/NavBar';
 
 const defaultMensajes = {
-  verde: ['Llegué bien a destino', 'Estoy en lugar seguro', 'Todo tranquilo'],
-  amarillo: ['Saliendo de casa', 'Subiendo al colectivo', 'Caminando, todo bien'],
+  verde: ['Llegué bien 😊', 'Ya se me pasó 💪', 'Ya se durmió 🙏'],
+  amarillo: ['Saliendo, te aviso al llegar', 'Me siento maread@', 'Otra vez llegó borracho'],
 };
 
 function getInstrucciones(label) {
@@ -138,7 +138,6 @@ export default function ConfigAlertas() {
       contactos: Object.keys(nueva[color].contactosPorMensaje[index] || {}).join(','),
     });
 
-    // Procesar nuevas invitaciones al guardar
     const invitacionesParaEsteMensaje = nuevasInvitaciones.filter(
       inv => inv.color === color && inv.mensajeIndex === index
     );
@@ -194,7 +193,6 @@ export default function ConfigAlertas() {
     );
 
     if (seleccionado) {
-      // Quitar contacto aceptado
       const nueva = JSON.parse(JSON.stringify(config));
       delete nueva[color].contactosPorMensaje[mensajeIndex][contactoId];
       setConfig(nueva);
@@ -207,14 +205,12 @@ export default function ConfigAlertas() {
     }
 
     if (nuevaInvitacion) {
-      // Cancelar nueva invitación local
       setNuevasInvitaciones(prev => prev.filter(
         inv => !(inv.contactoId === contactoId && inv.color === color && inv.mensajeIndex === mensajeIndex)
       ));
       return;
     }
 
-    // Agregar nueva invitación local (sin guardar aún)
     setNuevasInvitaciones(prev => [...prev, { contactoId, color, mensajeIndex }]);
   }
 
@@ -445,7 +441,7 @@ export default function ConfigAlertas() {
                         </button>
                       )}
                       {!pendiente && (
-                        <div style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${seleccionado ? bg : nuevaInv ? '#3498db' : '#444'}`, background: seleccionado ? bg : nuevaInv ? '#3498db' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#fff', flexShrink: 0 }}>
+                        <div style={{ width: 20, height: 20, borderRadius: '50%', border: `2px solid ${seleccionado ? '#2ecc71' : nuevaInv ? '#3498db' : '#444'}`, background: seleccionado ? '#2ecc71' : nuevaInv ? '#3498db' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#fff', flexShrink: 0 }}>
                           {(seleccionado || nuevaInv) && '✓'}
                         </div>
                       )}
@@ -504,7 +500,7 @@ export default function ConfigAlertas() {
                         <div
                           key={c.id}
                           onClick={() => toggleContactoRojo(c.contacto_id)}
-                          style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 10, background: seleccionado ? '#3a1a1a' : '#1a1a1a', border: `1px solid ${seleccionado ? '#e74c3c' : '#2a2a2a'}`, cursor: 'pointer', userSelect: 'none' }}
+                          style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 14px', borderRadius: 10, background: seleccionado ? '#1e3a2a' : '#1a1a1a', border: `1px solid ${seleccionado ? '#2ecc71' : '#2a2a2a'}`, cursor: 'pointer', userSelect: 'none' }}
                         >
                           <div style={{ width: 36, height: 36, borderRadius: '50%', background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 14, overflow: 'hidden', flexShrink: 0 }}>
                             {c.avatar_url
@@ -513,7 +509,7 @@ export default function ConfigAlertas() {
                             }
                           </div>
                           <span style={{ fontSize: 14 }}>{c.nombre || 'Sin nombre'}</span>
-                          <div style={{ marginLeft: 'auto', width: 20, height: 20, borderRadius: '50%', border: `2px solid ${seleccionado ? '#e74c3c' : '#444'}`, background: seleccionado ? '#e74c3c' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#fff' }}>
+                          <div style={{ marginLeft: 'auto', width: 20, height: 20, borderRadius: '50%', border: `2px solid ${seleccionado ? '#2ecc71' : '#444'}`, background: seleccionado ? '#2ecc71' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#fff' }}>
                             {seleccionado && '✓'}
                           </div>
                         </div>

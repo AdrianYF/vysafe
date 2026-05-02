@@ -8,11 +8,11 @@ import '../styles/Home.css';
 
 const defaultConfig = {
   verde: {
-    mensajes: ['Llegué bien a destino', 'Estoy en lugar seguro', 'Todo tranquilo'],
+    mensajes: ['Llegué bien 😊', 'Ya se me pasó 💪', 'Ya se durmió 🙏'],
     contactosPorMensaje: [{}, {}, {}],
   },
   amarillo: {
-    mensajes: ['Saliendo de casa', 'Subiendo al colectivo', 'Caminando, todo bien'],
+    mensajes: ['Saliendo, te aviso al llegar', 'Me siento maread@', 'Otra vez llegó borracho'],
     contactosPorMensaje: [{}, {}, {}],
   },
   rojo: { contactos: [] },
@@ -95,7 +95,6 @@ function Home() {
   const cargarTodo = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
 
-    // Actualizar perfil con datos actuales
     const nombre = user.user_metadata?.full_name || user.user_metadata?.nombre || user.email;
     const avatar_url = user.user_metadata?.avatar_url || user.user_metadata?.picture || null;
     const email = user.email;

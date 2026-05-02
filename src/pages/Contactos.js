@@ -5,8 +5,8 @@ import NavBar from '../components/NavBar';
 import './Contactos.css';
 
 const defaultMensajes = {
-  verde: ['Llegué bien a destino', 'Estoy en lugar seguro', 'Todo tranquilo'],
-  amarillo: ['Saliendo de casa', 'Subiendo al colectivo', 'Caminando, todo bien'],
+  verde: ['Llegué bien 😊', 'Ya se me pasó 💪', 'Ya se durmió 🙏'],
+  amarillo: ['Saliendo, te aviso al llegar', 'Me siento maread@', 'Otra vez llegó borracho'],
 };
 
 export default function Contactos({ soloInvitar = false, onCerrar = null }) {
@@ -288,7 +288,6 @@ export default function Contactos({ soloInvitar = false, onCerrar = null }) {
     { key: 'rojo', label: 'Rojo', bg: '#e74c3c', emoji: '🔴' },
   ];
 
-  // Componente reutilizable para el indicador de asignación
   const Indicador = ({ asignado, pendiente, desasignando }) => {
     if (pendiente) return <span style={{ fontSize: 11, color: '#f39c12' }}>⏳</span>;
     if (desasignando) return (
