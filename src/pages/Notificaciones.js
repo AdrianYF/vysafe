@@ -6,7 +6,7 @@ export default function Notificaciones() {
   const [pendientes, setPendientes] = useState([]);
   const [historial, setHistorial] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [modalUbicacion, setModalUbicacion] = useState(null); // { lat, lng }
+  const [modalUbicacion, setModalUbicacion] = useState(null);
 
   const cargarDatos = useCallback(async () => {
     const { data: { user } } = await supabase.auth.getUser();
@@ -96,31 +96,39 @@ export default function Notificaciones() {
     return fecha.toLocaleDateString('es-AR', { day: 'numeric', month: 'short' });
   }
 
-  // Extrae coordenadas del mensaje si tiene link de maps
   function extraerUbicacion(mensaje) {
     const match = mensaje.match(/https:\/\/maps\.google\.com\/\?q=([-\d.]+),([-\d.]+)/);
-    if (match) {
-      return { lat: match[1], lng: match[2] };
-    }
+    if (match) return { lat: match[1], lng: match[2] };
     return null;
   }
 
-  // Devuelve el mensaje sin el link de maps
   function limpiarMensaje(mensaje) {
     return mensaje.replace(/\s*📍\s*https:\/\/maps\.google\.com\/\?q=[-\d.,]+/g, '').trim();
   }
 
-  function abrirEnGoogleMaps(lat, lng) {
+  async function registrarEventoUbicacion(app, lat, lng) {
+    const { data: { user } } = await supabase.auth.getUser();
+    await supabase.from('eventos').insert({
+      usuario_id: user.id,
+      tipo: 'ver_ubicacion',
+      metadata: { app, lat, lng },
+    });
+  }
+
+  async function abrirEnGoogleMaps(lat, lng) {
+    await registrarEventoUbicacion('google_maps', lat, lng);
     window.open(`https://www.google.com/maps?q=${lat},${lng}`, '_blank');
     setModalUbicacion(null);
   }
 
-  function abrirEnWaze(lat, lng) {
+  async function abrirEnWaze(lat, lng) {
+    await registrarEventoUbicacion('waze', lat, lng);
     window.open(`https://waze.com/ul?ll=${lat},${lng}&navigate=yes`, '_blank');
     setModalUbicacion(null);
   }
 
-  function abrirEnNavegador(lat, lng) {
+  async function abrirEnNavegador(lat, lng) {
+    await registrarEventoUbicacion('navegador', lat, lng);
     window.open(`https://maps.google.com/?q=${lat},${lng}`, '_blank');
     setModalUbicacion(null);
   }
@@ -144,7 +152,6 @@ export default function Notificaciones() {
         <span style={{ fontSize: 18, fontWeight: 600 }}>🔔 Alertas</span>
       </div>
 
-      {/* Modal de ubicación */}
       {modalUbicacion && (
         <div
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.8)', zIndex: 300, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}

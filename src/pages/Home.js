@@ -20,6 +20,19 @@ const defaultConfig = {
   rojo: { contactos: [] },
 };
 
+function detectarPlataforma() {
+  const ua = navigator.userAgent;
+  const esPWA = window.matchMedia('(display-mode: standalone)').matches;
+  const esIOS = /iPhone|iPad|iPod/.test(ua);
+  const esAndroid = /Android/.test(ua);
+  const esSafari = /Safari/.test(ua) && !/Chrome/.test(ua);
+
+  if (esPWA && esIOS) return 'pwa-ios';
+  if (esPWA && esAndroid) return 'pwa-android';
+  if (esSafari) return 'safari';
+  return 'chrome';
+}
+
 function Home() {
   const navigate = useNavigate();
   const location = useLocation();
@@ -54,7 +67,6 @@ function Home() {
 
     const tieneFilas = { verde: false, amarillo: false };
 
-    // Deduplicar por color+mensaje_index
     const filasDedup = {};
     rows.forEach(row => {
       const key = `${row.color}-${row.mensaje_index}`;
@@ -121,6 +133,13 @@ function Home() {
       .update({ nombre, avatar_url, email })
       .eq('id', user.id);
 
+    // Registrar sesión con plataforma
+    const plataforma = detectarPlataforma();
+    await supabase.from('sesiones').insert({
+      usuario_id: user.id,
+      plataforma,
+    });
+
     if (window.OneSignalDeferred) {
       window.OneSignalDeferred.push(async function(OneSignal) {
         try {
@@ -151,7 +170,6 @@ function Home() {
     cargarTodo();
   }, [cargarTodo, location]);
 
-  // Obtiene ubicación actual — devuelve {lat, lng} o null
   async function obtenerUbicacion() {
     if (!navigator.geolocation) return null;
 
@@ -159,8 +177,7 @@ function Home() {
     return new Promise((resolve) => {
       navigator.geolocation.getCurrentPosition(
         (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-        (err) => {
-          // Permiso denegado o error
+        () => {
           setAvisoUbicacion(true);
           setTimeout(() => setAvisoUbicacion(false), 6000);
           resolve(null);
@@ -182,14 +199,12 @@ function Home() {
 
       if (contactosDestino.length === 0) return false;
 
-      // Determinar si hay que pedir ubicación
       const debeCompartir = tipoAlerta === 'rojo' || (config[tipoAlerta]?.compartirUbicacion?.[msgIdx] ?? false);
       let ubicacion = null;
       if (debeCompartir) {
         ubicacion = await obtenerUbicacion();
       }
 
-      // Guardar alerta en historial
       const { data: { user } } = await supabase.auth.getUser();
       await supabase.from('alertas_enviadas').insert({
         usuario_id: user.id,
@@ -199,7 +214,6 @@ function Home() {
         longitud: ubicacion?.lng ?? null,
       });
 
-      // Mandar push con ubicación si corresponde
       const mensajeConUbicacion = ubicacion
         ? `${mensaje} 📍 https://maps.google.com/?q=${ubicacion.lat},${ubicacion.lng}`
         : mensaje;
