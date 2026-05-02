@@ -20,9 +20,7 @@ const COLORES_ALERTA = {
 
 export default function Admin() {
   const [loading, setLoading] = useState(true);
-  const [filtro, setFiltro] = useState('30d'); // '7d', '30d', '90d', 'todo'
-
-  // Datos
+  const [filtro, setFiltro] = useState('30d');
   const [usuariosPorMes, setUsuariosPorMes] = useState([]);
   const [alertasPorMes, setAlertasPorMes] = useState([]);
   const [datosPlataforma, setDatosPlataforma] = useState([]);
@@ -31,19 +29,17 @@ export default function Admin() {
   const [statsUbicacion, setStatsUbicacion] = useState({ con: 0, sin: 0, clics: 0 });
   const [promedioMensajes, setPromedioMensajes] = useState({ verde: 0, amarillo: 0 });
 
-  function getFechaDesde() {
-    const ahora = new Date();
-    if (filtro === '7d') return new Date(ahora - 7 * 86400000).toISOString();
-    if (filtro === '30d') return new Date(ahora - 30 * 86400000).toISOString();
-    if (filtro === '90d') return new Date(ahora - 90 * 86400000).toISOString();
-    return null;
-  }
-
   const cargarDatos = useCallback(async () => {
     setLoading(true);
-    const desde = getFechaDesde();
 
-    // 1. Usuarios por mes (de auth.users via perfiles)
+    // getFechaDesde dentro del callback para evitar warning de ESLint
+    const ahora = new Date();
+    let desde = null;
+    if (filtro === '7d') desde = new Date(ahora - 7 * 86400000).toISOString();
+    else if (filtro === '30d') desde = new Date(ahora - 30 * 86400000).toISOString();
+    else if (filtro === '90d') desde = new Date(ahora - 90 * 86400000).toISOString();
+
+    // 1. Usuarios por mes
     const { data: perfiles } = await supabase
       .from('perfiles')
       .select('created_at')
@@ -51,11 +47,10 @@ export default function Admin() {
 
     const usuariosMes = {};
     (perfiles || []).forEach(p => {
-      const mes = p.created_at.substring(0, 7); // YYYY-MM
+      const mes = p.created_at.substring(0, 7);
       usuariosMes[mes] = (usuariosMes[mes] || 0) + 1;
     });
 
-    // Acumulado
     let acum = 0;
     const usuariosMesData = Object.entries(usuariosMes).map(([mes, cant]) => {
       acum += cant;
@@ -75,7 +70,7 @@ export default function Admin() {
     setDatosPlataforma(Object.entries(platCount).map(([name, value]) => ({ name, value })));
 
     // 3. Alertas por mes
-    let queryAlertas = supabase.from('alertas_enviadas').select('color, created_at');
+    let queryAlertas = supabase.from('alertas_enviadas').select('color, created_at, latitud');
     if (desde) queryAlertas = queryAlertas.gte('created_at', desde);
     const { data: alertas } = await queryAlertas;
 
@@ -187,7 +182,6 @@ export default function Admin() {
         </div>
       ) : (
         <>
-          {/* Tarjetas resumen */}
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 32 }}>
             {tarjeta('Usuarios totales', datosTorta[0]?.value + datosTorta[1]?.value || 0, 'registrados')}
             {tarjeta('Con contactos', datosTorta[0]?.value || 0, 'tienen red armada', '#2ecc71')}
@@ -195,7 +189,6 @@ export default function Admin() {
             {tarjeta('Clics ubicación', statsUbicacion.clics, 'veces abrieron el mapa', '#3498db')}
           </div>
 
-          {/* Usuarios por mes */}
           <div style={{ background: '#1a1a1a', borderRadius: 16, padding: 20, marginBottom: 20 }}>
             <p style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 600 }}>👥 Usuarios nuevos por mes</p>
             <ResponsiveContainer width="100%" height={220}>
@@ -211,7 +204,6 @@ export default function Admin() {
             </ResponsiveContainer>
           </div>
 
-          {/* Plataformas */}
           <div style={{ background: '#1a1a1a', borderRadius: 16, padding: 20, marginBottom: 20 }}>
             <p style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 600 }}>📱 Sesiones por plataforma</p>
             <ResponsiveContainer width="100%" height={220}>
@@ -229,7 +221,6 @@ export default function Admin() {
             </ResponsiveContainer>
           </div>
 
-          {/* Alertas por mes */}
           <div style={{ background: '#1a1a1a', borderRadius: 16, padding: 20, marginBottom: 20 }}>
             <p style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 600 }}>🚨 Alertas por mes</p>
             <ResponsiveContainer width="100%" height={220}>
@@ -246,7 +237,6 @@ export default function Admin() {
             </ResponsiveContainer>
           </div>
 
-          {/* Heatmap horario */}
           <div style={{ background: '#1a1a1a', borderRadius: 16, padding: 20, marginBottom: 20 }}>
             <p style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 600 }}>🕐 Horario de alertas</p>
             <ResponsiveContainer width="100%" height={180}>
@@ -260,7 +250,6 @@ export default function Admin() {
             </ResponsiveContainer>
           </div>
 
-          {/* Torta usuarios + Ubicación + Promedio mensajes */}
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
 
             <div style={{ background: '#1a1a1a', borderRadius: 16, padding: 20, flex: 1, minWidth: 260 }}>
