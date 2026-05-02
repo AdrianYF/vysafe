@@ -16,6 +16,7 @@ export default async function handler(req, res) {
   };
 
   const sonido = sonidos[color] || 'VySafe-Verde';
+  const tagUnico = `vysafe-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
 
   const payload = {
     app_id: process.env.ONESIGNAL_APP_ID,
@@ -23,8 +24,7 @@ export default async function handler(req, res) {
     contents: { en: mensaje, es: mensaje },
     headings: { en: '🚨 VySafe', es: '🚨 VySafe' },
     android_sound: sonido,
-    android_group: `vysafe-${tipo || 'alerta'}`,
-    collapse_id: `vysafe-${Date.now()}`,
+    web_push_topic: tagUnico,
   };
 
   if (url) {
